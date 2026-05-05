@@ -1,0 +1,2 @@
+[console_scripts]
+codeabstract = codeabstract.cli:app

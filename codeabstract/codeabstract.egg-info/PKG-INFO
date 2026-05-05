@@ -1,0 +1,100 @@
+Metadata-Version: 2.4
+Name: codeabstract
+Version: 1.0.0
+Summary: Privacy-Preserving CLI for Secure LLM Code Consultation
+Author: CodeAbstract Team
+License: MIT
+Keywords: privacy,llm,code-abstraction,ast,security
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Security
+Classifier: Topic :: Software Development :: Libraries
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: typer>=0.12.3
+Requires-Dist: rich>=13.7.1
+Requires-Dist: cryptography>=42.0.5
+Requires-Dist: pygments>=2.17.2
+Requires-Dist: pyperclip>=1.8.2
+Requires-Dist: questionary>=2.0.1
+Provides-Extra: dev
+Requires-Dist: pytest>=8.1.1; extra == "dev"
+Requires-Dist: pytest-cov>=5.0.0; extra == "dev"
+
+# CodeAbstract
+
+**Privacy-Preserving CLI for Secure LLM Code Consultation**
+
+CodeAbstract performs AST-based semantic abstraction to transform proprietary Python code into privacy-safe intermediate representation, enabling developers to safely consult LLMs (ChatGPT, Claude, etc.) without exposing intellectual property.
+
+## Features
+
+- **AST-based Abstraction** — Parses Python code and replaces sensitive identifiers with tokens
+- **Sensitivity Classification** — Automatically detects secrets (API keys, passwords, tokens) and business values (prices, rates, endpoints)
+- **Encrypted Mapping** — AES-128-CBC + HMAC-SHA256 (Fernet) encryption for mapping storage
+- **Bidirectional Translation** — Translates LLM responses back to original identifiers with source context
+- **Session Management** — SQLite-backed session persistence with prefix-matching
+- **Beautiful CLI** — Rich terminal output with syntax highlighting and progress indicators
+
+## Installation
+
+```bash
+cd codeabstract
+python -m venv .venv
+.venv\Scripts\activate     # Windows
+# source .venv/bin/activate  # macOS/Linux
+pip install -e ".[dev]"
+```
+
+## Quick Start
+
+```bash
+# Abstract your code
+codeabstract abstract payment.py --copy --show-mapping
+
+# Paste abstract code into ChatGPT/Claude, get response, then:
+codeabstract translate <session-id> "The bug in FUNC_0 is..."
+
+# Or use the guided workflow
+codeabstract interactive
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `codeabstract abstract <file>` | Abstract source code |
+| `codeabstract translate <id> [text]` | Translate LLM response |
+| `codeabstract interactive` | Guided workflow |
+| `codeabstract sessions list` | List sessions |
+| `codeabstract sessions show <id>` | Show session details |
+| `codeabstract sessions delete <id>` | Delete a session |
+| `codeabstract config show` | Show configuration |
+| `codeabstract stats` | Usage statistics |
+
+## Privacy Levels
+
+| Level | Behavior |
+|-------|----------|
+| `low` | Only secrets (API keys, passwords) |
+| `medium` | Secrets + business values (default) |
+| `high` | All multi-character identifiers |
+| `critical` | Everything abstracted |
+
+## Testing
+
+```bash
+pytest tests/ -v
+pytest tests/ --cov=codeabstract --cov-report=term-missing
+```
+
+## License
+
+MIT

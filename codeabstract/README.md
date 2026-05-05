@@ -1,0 +1,124 @@
+# CodeAbstract
+
+> **Privacy-Preserving CLI for Secure LLM Code Consultation**
+
+CodeAbstract is a complete command-line interface (CLI) tool that implements a privacy-preserving framework enabling developers to safely consult Large Language Models (LLMs) on sensitive code without exposing intellectual property. 
+
+The system performs AST-based semantic abstraction to transform proprietary Python code into a privacy-optimized intermediate representation, coupled with context-aware bidirectional mapping for actionable feedback translation.
+
+---
+
+## 🌟 Key Features
+
+* **AST-Based Semantic Abstraction:** Intelligently parses Python code into an Abstract Syntax Tree (AST), replacing sensitive identifiers while preserving logic and structure.
+* **Sensitivity Classification:** Automatically classifies nodes into `SECRET` (API keys, passwords, tokens) and `VALUE` (prices, rates, endpoints) using pattern matching.
+* **Context-Aware Reconstruction:** Translates the LLM's feedback back to your original source code context, appending multi-line code snippets so you know exactly where to apply changes.
+* **Secure Local Storage:** All mappings between original names and abstracted tokens are stored in a local SQLite database, encrypted using AES-128-CBC + HMAC-SHA256 (Fernet).
+* **Interactive CLI Wizard:** A beautiful, fully guided terminal UI (built with Rich and Typer) makes the abstraction and translation process seamless.
+
+---
+
+## ⚙️ How It Works (The 4 Formal Algorithms)
+
+CodeAbstract is built on four core algorithms:
+
+1. **`ABSTRACT(S, k)`:** Parses source code into an AST, generates consistent tokens (e.g., `FUNC_0`, `SECRET_1`), extracts a context window of ±k lines, and replaces the nodes in the code.
+2. **`CLASSIFY(E)`:** Evaluates each AST node against regex patterns to classify it as a `SECRET`, `VALUE`, or default `IDENTIFIER`.
+3. **`RECONSTRUCT(R, M̃, K)`:** Takes an LLM response containing tokens, decrypts your local mapping table, restores the original identifiers, and appends a "Source Context" block for human readability.
+4. **`ENCRYPT(M) / DECRYPT(M̃, K)`:** Uses high-grade Fernet symmetric encryption to ensure your mapping tables are stored securely at rest in your local database.
+
+---
+
+## 🚀 Installation
+
+Ensure you have Python 3.9+ installed. It is highly recommended to install CodeAbstract inside a virtual environment.
+
+```powershell
+# Clone the repository
+git clone https://github.com/yourusername/codeabstract.git
+cd codeabstract
+
+# Create and activate a virtual environment
+python -m venv .venv
+.\.venv\Scripts\activate   # On Windows
+# source .venv/bin/activate # On macOS/Linux
+
+# Install the application
+pip install -e ".[dev]"
+```
+
+---
+
+## 💻 Usage Guide
+
+### 1. The Interactive Wizard (Recommended)
+The easiest way to use CodeAbstract is through the interactive mode. It will guide you step-by-step through selecting a file, abstracting it, copying the code to your LLM, and translating the response.
+```powershell
+codeabstract interactive
+```
+
+### 2. Manual Workflow: Abstracting Code
+You can manually abstract a Python file to prepare it for an LLM:
+```powershell
+codeabstract abstract path/to/your_file.py --copy --show-mapping
+```
+*The `--copy` flag automatically copies the safe, abstracted code to your clipboard. A **Session ID** will be printed to your terminal.*
+
+### 3. Manual Workflow: Translating Responses
+Once ChatGPT or Claude gives you an answer (using the abstract tokens), translate it back to your original variables:
+```powershell
+# Using direct text
+codeabstract translate <SESSION_ID> "The bug is in FUNC_0."
+
+# Or reading the LLM's response from a text file
+codeabstract translate <SESSION_ID> --file response.txt
+```
+
+### 4. Managing Sessions
+All abstraction sessions are securely saved locally.
+```powershell
+codeabstract sessions list           # View recent sessions
+codeabstract sessions show <ID>      # View details of a specific session
+codeabstract sessions delete <ID>    # Delete a session
+codeabstract stats                   # View global usage statistics
+```
+
+---
+
+## 🔒 Privacy Levels
+
+When running the `abstract` command (or using the interactive wizard), you can specify a privacy level that dictates how aggressive the abstraction should be:
+
+| Level | Description | Behavior |
+|-------|-------------|----------|
+| `low` | Secrets Only | Abstract only `SECRET` patterns (API keys, passwords, auth tokens). |
+| `medium` | Recommended | Abstracts `SECRET` and business `VALUE` patterns (rates, fees, endpoints). |
+| `high` | Strict | Abstracts all multi-character identifiers, secrets, and values. |
+| `critical` | Maximum | Abstracts absolutely everything, including single-character loop variables. |
+
+Use it manually via: `codeabstract abstract file.py --privacy high`
+
+---
+
+## 🧪 Testing
+
+CodeAbstract ships with a comprehensive test suite covering the core algorithms, encryption, CLI commands, and end-to-end workflows. 
+
+Run the tests using `pytest`:
+
+```powershell
+# Run the full test suite
+pytest tests/ -v
+
+# Run tests with a coverage report
+pytest tests/ --cov=codeabstract --cov-report=term-missing
+```
+
+---
+
+## 🛠️ Technology Stack
+- **CLI Framework:** `typer` & `questionary`
+- **Terminal UI:** `rich` & `pygments`
+- **Parsing:** Python standard `ast` library
+- **Security:** `cryptography` (Fernet)
+- **Database:** Local `sqlite3`
