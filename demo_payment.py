@@ -1,6 +1,22 @@
-api_key = "user_secret_ABC123"
-login_url = "https://auth.example.com/login"
+class PaymentProcessor:
+    RATE = 0.029
 
-def authenticate_user(username, password):
-    token = api_key + username
-    return {"url": login_url, "token": token}
+    def __init__(self):
+        self.transactions = []
+
+    def calculate(self, amount):
+        return round(amount * self.RATE, 2)
+
+    def process(self, user, amount):
+        fee = self.calculate(amount)
+        total = amount + fee
+
+        transaction = {
+            "user": user,
+            "amount": amount,
+            "total": total
+        }
+
+        self.transactions.append(transaction)
+
+        return transaction_id
