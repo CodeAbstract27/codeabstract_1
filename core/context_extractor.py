@@ -4,7 +4,7 @@ Context Extraction Implementation
 Implements GetContext(S, lineno, k) helper algorithm.
 Extracts ±k lines of source code surrounding a target line number.
 """
-
+"Extratrig  method"
 from typing import Dict
 
 
