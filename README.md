@@ -49,7 +49,30 @@ pip install -e ".[dev]"
 
 ---
 
+## 🔑 API Key Configuration
+
+To use the automated code review feature (`codeabstract review`), you must configure your Google Gemini API key using one of the following methods (ordered by resolution priority):
+
+1. **CLI Argument**: Pass it directly with the `--api-key` option:
+   ```powershell
+   codeabstract review path/to/file.py --api-key YOUR_API_KEY
+   ```
+2. **Environment Variable**: Set it in your terminal:
+   - **PowerShell**: `$env:GEMINI_API_KEY="YOUR_API_KEY"`
+   - **Bash/Zsh**: `export GEMINI_API_KEY="YOUR_API_KEY"`
+3. **Environment File (`.env`)**: Create a file named `.env` in the current working directory or repository root containing:
+   ```env
+   GEMINI_API_KEY=YOUR_API_KEY
+   ```
+4. **Application Configuration**: Store it in your persistent global configuration file:
+   ```powershell
+   codeabstract config set gemini_api_key YOUR_API_KEY
+   ```
+
+---
+
 ## 💻 Usage Guide
+
 
 ### 1. The Interactive Wizard (Recommended)
 The easiest way to use CodeAbstract is through the interactive mode. It will guide you step-by-step through selecting a file, abstracting it, copying the code to your LLM, and translating the response.
