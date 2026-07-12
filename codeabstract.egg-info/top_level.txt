@@ -1,9 +1,9 @@
 algorithms
 cli
-codeabstract
 commands
 config
 core
+llm
 storage
 tests
 ui

@@ -36,7 +36,7 @@ def get_config_path() -> Path:
 # ═══════════════════════════════════════════════════════════
 
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "default_privacy": "medium",
+    "default_privacy": "high",
     "default_context_window": 3,
     "default_output_format": "text",
     "auto_copy": False,
@@ -136,3 +136,58 @@ def get_config() -> Config:
     if _config_instance is None:
         _config_instance = Config()
     return _config_instance
+
+
+def get_api_key(provider: str) -> Optional[str]:
+    """
+    Get stored API key for a provider from config.
+
+    Looks up ``{provider}_api_key`` in the config file.
+    For example, ``get_api_key('openai')`` returns the value
+    stored under the key ``openai_api_key``.
+
+    Args:
+        provider: Provider name (openai, anthropic, gemini).
+
+    Returns:
+        The API key string, or None if not configured.
+    """
+    cfg = get_config()
+    return cfg.get(f"{provider}_api_key")
+
+
+def load_dotenv():
+    """Load environment variables from a .env file if it exists."""
+    search_paths = [
+        Path.cwd() / ".env",
+        Path(__file__).resolve().parents[1] / ".env"
+    ]
+    for path in search_paths:
+        if path.is_file():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        if "=" in line:
+                            key, val = line.split("=", 1)
+                            key = key.strip()
+                            val = val.strip()
+                            # Strip quotes
+                            if len(val) >= 2 and (
+                                (val.startswith('"') and val.endswith('"')) or
+                                (val.startswith("'") and val.endswith("'"))
+                            ):
+                                val = val[1:-1]
+                            if key and key not in os.environ:
+                                os.environ[key] = val
+            except Exception:
+                pass
+            break
+
+
+# Load environment variables on module import
+load_dotenv()
+
+

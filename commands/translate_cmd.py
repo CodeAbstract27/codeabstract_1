@@ -68,11 +68,13 @@ def run_translate(
         except Exception as e:
             console.print(f"[error]✗ Failed to save: {e}[/error]\n")
 
+    from rich.box import ROUNDED
     panel = Panel(
         translated,
         title="[bold]Translated Feedback[/bold]",
         title_align="left",
-        border_style="cyan",
+        border_style="#d77757",
+        box=ROUNDED,
         expand=False,
     )
     console.print(panel)

@@ -44,7 +44,8 @@ def run_sessions_show(session_id: str):
         f"[info]Created:[/info]      {session['created_at']}\n"
         f"[info]Context window:[/info] {session['context_window']}"
     )
-    panel = Panel(content, title="Session Details", border_style="cyan")
+    from rich.box import ROUNDED
+    panel = Panel(content, title="Session Details", border_style="#d77757", box=ROUNDED)
     console.print(panel)
     console.print()
     print_abstraction_stats(session.get('statistics', {}))

@@ -7,6 +7,7 @@ context blocks, statistics panels, and session listings.
 
 from typing import Any, Dict, List
 
+from rich.box import ROUNDED, MINIMAL
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
@@ -72,7 +73,8 @@ def print_abstraction_stats(stats: Dict[str, Any]) -> None:
     panel = Panel(
         content,
         title="[header]Abstraction Statistics[/header]",
-        border_style="cyan",
+        border_style="#d77757",
+        box=ROUNDED,
         expand=False,
     )
     console.print(panel)
@@ -85,8 +87,9 @@ def print_session_table(sessions: List[Dict]) -> None:
     table = Table(
         title="Sessions",
         show_header=True,
-        header_style="bold cyan",
+        header_style="bold #d77757",
         border_style="dim",
+        box=ROUNDED,
     )
     table.add_column("Session ID", style="session_id", no_wrap=True, max_width=12)
     table.add_column("Source File", style="white")
@@ -111,18 +114,23 @@ def print_abstract_code(code: str, theme: str = "monokai") -> None:
     """Display abstract code with syntax highlighting."""
     console = get_console()
 
-    console.print("\n[bold]Abstract code preview:[/bold]")
-    console.print("─" * 70)
-
     syntax = Syntax(
         code,
         "python",
         theme=theme,
         line_numbers=True,
         word_wrap=True,
+        background_color="default",
     )
-    console.print(syntax)
-    console.print("─" * 70)
+    panel = Panel(
+        syntax,
+        title="[bold #d77757]Abstract Code Preview[/bold #d77757]",
+        title_align="left",
+        border_style="#d77757",
+        box=ROUNDED,
+        padding=(0, 1),
+    )
+    console.print(panel)
 
 
 def print_next_steps(session_id: str) -> None:
@@ -130,10 +138,10 @@ def print_next_steps(session_id: str) -> None:
     console = get_console()
     short_id = session_id[:8]
 
-    console.print("\n[bold cyan]💡 Next steps:[/bold cyan]")
-    console.print("  1. Paste the abstract code into ChatGPT / Claude")
+    console.print("\n[bold #d77757]💡 Next steps:[/bold #d77757]")
+    console.print("  1. Paste the abstract code into your LLM")
     console.print("  2. Ask for debugging / optimization / review help")
     console.print("  3. Copy the LLM's response")
     console.print(
-        f"  4. Run: [yellow]codeabstract translate {short_id}[/yellow]\n"
+        f"  4. Run: [accent]codeabstract translate {short_id}[/accent]\n"
     )

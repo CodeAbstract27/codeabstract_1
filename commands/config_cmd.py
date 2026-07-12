@@ -17,9 +17,10 @@ def run_config_show():
     console = get_console()
     cfg = get_config()
 
-    table = Table(title="Configuration", border_style="cyan", show_header=True, header_style="bold cyan")
+    from rich.box import ROUNDED
+    table = Table(title="Configuration", border_style="dim", show_header=True, header_style="bold #d77757", box=ROUNDED)
     table.add_column("Key", style="white")
-    table.add_column("Value", style="info")
+    table.add_column("Value", style="accent")
 
     for key, value in sorted(cfg.all().items()):
         table.add_row(key, str(value))

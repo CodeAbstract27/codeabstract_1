@@ -28,7 +28,7 @@ app.add_typer(config_app, name="config")
 @app.command()
 def abstract(
     file: str = typer.Argument(..., help="Path to Python source file"),
-    privacy: str = typer.Option("medium", help="Privacy level: low|medium|high|critical"),
+    privacy: str = typer.Option("high", help="Privacy level: low|medium|high|critical"),
     context_window: int = typer.Option(3, "--context-window", "-k", help="Context window size"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Save abstract code to file"),
     copy: bool = typer.Option(False, "--copy", "-c", help="Copy to clipboard"),
@@ -57,6 +57,28 @@ def interactive():
     """Interactive guided workflow."""
     from commands.interactive_cmd import run_interactive
     run_interactive()
+
+
+@app.command()
+def review(
+    file: str = typer.Argument(..., help="Python file to review"),
+    task: str = typer.Option("review", "--task", "-t",
+        help="debug | review | optimize | security | explain"),
+    output: Optional[str] = typer.Option(None, "--output", "-o"),
+    show_abstract: bool = typer.Option(False, "--show-abstract"),
+    api_key: Optional[str] = typer.Option(None, "--api-key"),
+    privacy: str = typer.Option("high", help="Privacy level: low|medium|high|critical"),
+):
+    """Auto review: Abstract -> Gemini -> Reconstruct"""
+    from commands.review_cmd import run_review
+    run_review(
+        file=file,
+        task=task,
+        output=output,
+        show_abstract=show_abstract,
+        api_key=api_key,
+        privacy=privacy,
+    )
 
 
 @app.command()

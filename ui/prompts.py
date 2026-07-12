@@ -16,13 +16,13 @@ from questionary import Style
 # ═══════════════════════════════════════════════════════════
 
 PROMPT_STYLE = Style([
-    ('qmark', 'fg:#673ab7 bold'),       # Purple question mark
+    ('qmark', 'fg:#d77757 bold'),       # Claude Orange question mark
     ('question', 'bold'),                # Bold question text
-    ('answer', 'fg:#2196f3 bold'),       # Blue answers
-    ('pointer', 'fg:#673ab7 bold'),      # Purple selection pointer
-    ('highlighted', 'fg:#673ab7 bold'),  # Purple highlighted option
-    ('selected', 'fg:#2196f3'),          # Blue selected option
-    ('separator', 'fg:#cc5454'),         # Red separator
+    ('answer', 'fg:#d77757 bold'),       # Orange answers
+    ('pointer', 'fg:#d77757 bold'),      # Orange selection pointer
+    ('highlighted', 'fg:#ffffff bold bg:#d77757'),  # White text on Orange background
+    ('selected', 'fg:#d77757'),          # Orange selected option
+    ('separator', 'fg:#d77757'),         # Orange separator
     ('instruction', 'fg:#808080'),       # Grey instructions
 ])
 
@@ -30,7 +30,7 @@ PROMPT_STYLE = Style([
 def ask_file_path() -> Optional[str]:
     """Prompt the user for a Python source file path."""
     result = questionary.path(
-        "📁 Enter the path to your Python source file:",
+        "Path to Python source file:",
         style=PROMPT_STYLE,
         only_directories=False,
     ).ask()
@@ -46,7 +46,7 @@ def ask_privacy_level() -> str:
         questionary.Choice("Critical — Everything abstracted", value="critical"),
     ]
     result = questionary.select(
-        "🔒 Select privacy level:",
+        "Select privacy level:",
         choices=choices,
         default=choices[1],
         style=PROMPT_STYLE,
@@ -57,7 +57,7 @@ def ask_privacy_level() -> str:
 def ask_context_window() -> int:
     """Prompt the user for the context window size."""
     result = questionary.text(
-        "📐 Context window size (±N lines, default 3):",
+        "Context window size (±N lines, default 3):",
         default="3",
         style=PROMPT_STYLE,
     ).ask()
@@ -70,7 +70,7 @@ def ask_context_window() -> int:
 def ask_copy_to_clipboard() -> bool:
     """Ask whether to copy abstract code to clipboard."""
     result = questionary.confirm(
-        "📋 Copy abstract code to clipboard?",
+        "Copy abstract code to clipboard?",
         default=True,
         style=PROMPT_STYLE,
     ).ask()
@@ -80,7 +80,7 @@ def ask_copy_to_clipboard() -> bool:
 def ask_llm_response() -> Optional[str]:
     """Prompt the user to paste the LLM response."""
     result = questionary.text(
-        "📝 Paste the LLM's response (or type 'file:path' to read from file):",
+        "Paste the LLM's response (or type 'file:path' to read from file):",
         multiline=True,
         style=PROMPT_STYLE,
     ).ask()
@@ -102,7 +102,7 @@ def ask_session_id(sessions: list) -> Optional[str]:
     ]
 
     result = questionary.select(
-        "🔑 Select a session:",
+        "Select a session:",
         choices=choices,
         style=PROMPT_STYLE,
     ).ask()
@@ -112,7 +112,7 @@ def ask_session_id(sessions: list) -> Optional[str]:
 def ask_confirm_delete(session_id: str) -> bool:
     """Confirm session deletion."""
     result = questionary.confirm(
-        f"⚠️  Delete session {session_id[:12]}…?",
+        f"Delete session {session_id[:12]}…?",
         default=False,
         style=PROMPT_STYLE,
     ).ask()

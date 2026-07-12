@@ -16,16 +16,18 @@ from rich.theme import Theme
 # ═══════════════════════════════════════════════════════════
 
 CODEABSTRACT_THEME = Theme({
-    "info": "cyan",
-    "success": "green bold",
-    "warning": "yellow",
-    "error": "red bold",
-    "highlight": "magenta",
-    "muted": "dim",
-    "header": "bold cyan underline",
-    "session_id": "bold blue",
+    "info": "white",
+    "brand": "bold #d77757",
+    "accent": "#d77757",
+    "success": "bold green",
+    "warning": "#ffb74d",
+    "error": "bold red",
+    "highlight": "bold #d77757",
+    "muted": "grey50",
+    "header": "bold #d77757",
+    "session_id": "bold #d77757",
     "secret": "bold red",
-    "value": "bold yellow",
+    "value": "#d77757",
     "identifier": "bold white",
 })
 

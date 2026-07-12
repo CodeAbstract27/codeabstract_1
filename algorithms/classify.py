@@ -52,6 +52,10 @@ def classify_node(node: ast.AST) -> Label:
     if matches_any(text_lower, VALUE_PATTERNS):
         return 'VALUE'
 
+    # Step 3b: Numeric constants are inherently business-sensitive
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float, complex)):
+        return 'VALUE'
+
     # Step 4: Default to IDENTIFIER
     return 'IDENTIFIER'
 

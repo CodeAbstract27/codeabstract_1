@@ -29,6 +29,7 @@ class TokenGenerator:
             'VAR': 0,
             'SECRET': 0,
             'CONST': 0,
+            'CLASS': 0,
         }
 
     def generate(self, prefix: str) -> str:

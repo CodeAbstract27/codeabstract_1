@@ -24,10 +24,12 @@ def run_stats():
         f"[success]Total abstractions:[/success]  {stats['total_abstractions']}"
     )
 
+    from rich.box import ROUNDED
     panel = Panel(
         content,
         title="[header]CodeAbstract Usage Statistics[/header]",
-        border_style="cyan",
+        border_style="#d77757",
+        box=ROUNDED,
         expand=False,
     )
     console.print(panel)

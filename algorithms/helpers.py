@@ -73,7 +73,8 @@ def is_semantically_significant(node: ast.AST) -> bool:
         return False
 
     # Rule 2: Skip single-character names (loop vars: i, j, x, y, …)
-    if len(name) <= 1:
+    #         but not numeric constants (e.g. 0, 5)
+    if len(name) <= 1 and not isinstance(node, ast.Constant):
         return False
 
     # Rule 3: Skip dunder names (__init__, __main__, __name__, …)
@@ -94,6 +95,8 @@ def _extract_name(node: ast.AST) -> Optional[str]:
         return node.name
     elif isinstance(node, ast.arg):
         return node.arg
+    elif isinstance(node, ast.Attribute):
+        return node.attr
     elif isinstance(node, ast.Constant):
         return str(node.value)
     return None
@@ -124,9 +127,13 @@ def label_to_prefix(label: str, node_type: str) -> str:
     if node_type in ('FunctionDef', 'AsyncFunctionDef'):
         return 'FUNC'
 
-    # Rule 3: Constants → "CONST"
+    # Rule 3: Class definitions → "CLASS"
+    if node_type == 'ClassDef':
+        return 'CLASS'
+
+    # Rule 4: Constants → "CONST"
     if node_type == 'Constant':
         return 'CONST'
 
-    # Rule 4: Default → "VAR"
+    # Rule 5: Default → "VAR"
     return 'VAR'

@@ -142,6 +142,56 @@ class Foo:
         result = abstract(SAMPLE_PAYMENT_CODE, privacy_level="high")
         assert result.statistics['abstracted_nodes'] > 0
 
+    def test_abstract_class_uses_class_prefix(self):
+        """ClassDef nodes should get CLASS_ prefix, not VAR_."""
+        source = '''
+class OrderService:
+    def process(self):
+        pass
+'''
+        result = abstract(source, privacy_level="high")
+        assert 'CLASS_' in result.abstract_code
+        assert 'OrderService' not in result.abstract_code
+
+    def test_abstract_attribute_names(self):
+        """Attribute names on self should be abstracted."""
+        source = '''
+class Foo:
+    def run(self):
+        self.order_repo = None
+        self.payment_gateway = None
+'''
+        result = abstract(source, privacy_level="high")
+        assert 'order_repo' not in result.abstract_code
+        assert 'payment_gateway' not in result.abstract_code
+
+    def test_abstract_method_calls_get_func_prefix(self):
+        """Method calls on objects (obj.method()) should get FUNC_ prefix."""
+        source = '''
+class Svc:
+    def run(self):
+        self.repo.save()
+'''
+        result = abstract(source, privacy_level="high")
+        mapping = _decrypt_mapping(result)
+        # 'save' is a method call → should have FUNC prefix
+        save_tokens = [t for t, e in mapping.items() if e['name'] == 'save']
+        assert len(save_tokens) == 1
+        assert save_tokens[0].startswith('FUNC_')
+
+    def test_abstract_self_preserved_with_attributes(self):
+        """self should never be abstracted, even when attributes are."""
+        source = '''
+class Svc:
+    def run(self):
+        val = self.my_service.process()
+        return val
+'''
+        result = abstract(source, privacy_level="high")
+        assert 'self' in result.abstract_code
+        assert 'my_service' not in result.abstract_code
+        assert 'process' not in result.abstract_code
+
 
 def _decrypt_mapping(result):
     """Helper to decrypt mapping from result for test assertions."""

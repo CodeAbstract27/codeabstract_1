@@ -1,232 +1,166 @@
 """
-Usage:
-    process.py [options] INPUT_DIR OUTPUT_DIR
+Replaying CAPI proxy for E2E tests.
 
-Options:
-    -h --help
-    --language LANGUAGE             Language
-    --processes PROCESSES           # of processes to use [default: 16]
-    --license-filter FILE           License metadata to filter, every row contains [nwo, license, language, score] (e.g. ['pandas-dev/pandas', 'bsd-3-clause', 'Python', 0.9997])
-    --tree-sitter-build FILE        [default: /src/build/py-tree-sitter-languages.so]
+This manages a child process that acts as a replaying proxy to AI endpoints.
+It spawns the shared test harness server from test/harness/server.ts.
 """
-import functools
-from multiprocessing import Pool
-import pickle
-from os import PathLike
-from typing import Optional, Tuple, Type, List, Dict, Any
 
-from docopt import docopt
-from dpu_utils.codeutils.deduplication import DuplicateDetector
-import pandas as pd
-from tree_sitter import Language, Parser
+import json
+import os
+import platform
+import re
+import subprocess
+from typing import Any
 
-from language_data import LANGUAGE_METADATA
-from parsers.language_parser import LanguageParser, tokenize_docstring
-from utils import download, get_sha, flatten, remap_nwo, walk
+import httpx
 
-class DataProcessor:
 
-    PARSER = Parser()
+class CapiProxy:
+    """Manages a replaying proxy server for E2E tests."""
 
-    def __init__(self, language: str, language_parser: Type[LanguageParser]):
-        self.language = language
-        self.language_parser = language_parser
+    def __init__(self):
+        self._process: subprocess.Popen | None = None
+        self._proxy_url: str | None = None
+        self._connect_proxy_url: str | None = None
+        self._ca_file_path: str | None = None
 
-    def process_dee(self, nwo, ext) -> List[Dict[str, Any]]:
-        # Process dependees (libraries) to get function implementations
-        indexes = []
-        _, nwo = remap_nwo(nwo)
-        if nwo is None:
-            return indexes
+    async def start(self) -> str:
+        """Launch the proxy server and return its URL."""
+        if self._proxy_url:
+            return self._proxy_url
 
-        tmp_dir = download(nwo)
-        files = walk(tmp_dir, ext)
-        # files = glob.iglob(tmp_dir.name + '/**/*.{}'.format(ext), recursive=True)
-        sha = None
+        # The harness server is in the shared test directory
+        server_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "..", "test", "harness", "server.ts"
+        )
+        server_path = os.path.abspath(server_path)
 
-        for f in files:
-            definitions = self.get_function_definitions(f)
-            if definitions is None:
-                continue
-            if sha is None:
-                sha = get_sha(tmp_dir, nwo)
+        # On Windows, use shell=True to find npx
+        use_shell = platform.system() == "Windows"
 
-            nwo, path, functions = definitions
-            indexes.extend((self.extract_function_data(func, nwo, path, sha) for func in functions if len(func['function_tokens']) > 1))
-        return indexes
+        self._process = subprocess.Popen(
+            ["npx", "tsx", server_path],
+            stdout=subprocess.PIPE,
+            stderr=None,  # Inherit stderr to parent for debugging
+            text=True,
+            cwd=os.path.dirname(server_path),
+            shell=use_shell,
+        )
 
-    def process_dent(self, nwo, ext, library_candidates) -> Tuple[List[Dict[str, Any]], List[Tuple[str, str]]]:
-        # Process dependents (applications) to get function calls
-        dents = []
-        edges = []
-        _, nwo = remap_nwo(nwo)
-        if nwo is None:
-            return dents, edges
+        # Read until the server prints "Listening: http://..."; npm/npx may emit
+        # wrapper output first on some platforms.
+        line = ""
+        match = None
+        while True:
+            line = self._process.stdout.readline()
+            if not line:
+                self._process.kill()
+                raise RuntimeError("Failed to read proxy URL")
+            match = re.search(r"Listening: (http://[^\s]+)", line.strip())
+            if match:
+                break
 
-        tmp_dir = download(nwo)
-        files = walk(tmp_dir, ext)
-        sha = None
+        self._proxy_url = match.group(1)
+        metadata_match = re.search(r"(\{.*\})\s*$", line.strip())
+        if not metadata_match:
+            self._process.kill()
+            raise RuntimeError(f"Proxy startup line missing CONNECT proxy metadata: {line}")
+        try:
+            metadata = json.loads(metadata_match.group(1))
+        except json.JSONDecodeError as exc:
+            self._process.kill()
+            raise RuntimeError(f"Failed to parse proxy startup metadata: {line}") from exc
+        self._connect_proxy_url = metadata.get("connectProxyUrl")
+        self._ca_file_path = metadata.get("caFilePath")
+        if not self._connect_proxy_url or not self._ca_file_path:
+            self._process.kill()
+            raise RuntimeError(f"Proxy startup metadata missing CONNECT proxy details: {line}")
+        return self._proxy_url
 
-        for f in files:
-            context_and_calls = self.get_context_and_function_calls(f)
-            if context_and_calls is None:
-                continue
-            if sha is None:
-                sha = get_sha(tmp_dir, nwo)
+    async def stop(self, skip_writing_cache: bool = False):
+        """Gracefully shut down the proxy server.
 
-            nwo, path, context, calls = context_and_calls
-            libraries = []
-            for cxt in context:
-                if type(cxt) == dict:
-                    libraries.extend([v.split('.')[0] for v in cxt.values()])
-                elif type(cxt) == list:
-                    libraries.extend(cxt)
+        Args:
+            skip_writing_cache: If True, the proxy won't write captured exchanges to disk.
+        """
+        if not self._process:
+            return
 
-            match_scopes = {}
-            for cxt in set(libraries):
-                if cxt in library_candidates:
-                    match_scopes[cxt] = library_candidates[cxt]
+        # Send stop request to the server
+        if self._proxy_url:
+            try:
+                stop_url = f"{self._proxy_url}/stop"
+                if skip_writing_cache:
+                    stop_url += "?skipWritingCache=true"
+                async with httpx.AsyncClient() as client:
+                    await client.post(stop_url)
+            except Exception:
+                pass  # Best effort
 
-            for call in calls:
-                for depended_library_name, dependend_library_functions in match_scopes.items():
-                    for depended_library_function in dependend_library_functions:
-                        # Other potential filters: len(call['identifier']) > 6 or len(call['identifier'].split('_')) > 1
-                        if (call['identifier'] not in self.language_parser.STOPWORDS and
-                            ((depended_library_function['identifier'].split('.')[-1] == '__init__' and
-                              call['identifier'] == depended_library_function['identifier'].split('.')[0]) or
-                             ((len(call['identifier']) > 9 or
-                               (not call['identifier'].startswith('_') and len(call['identifier'].split('_')) > 1)) and
-                              call['identifier'] == depended_library_function['identifier'])
-                            )):
-                            dent = {
-                                'nwo': nwo,
-                                'sha': sha,
-                                'path': path,
-                                'language': self.language,
-                                'identifier': call['identifier'],
-                                'argument_list': call['argument_list'],
-                                'url': 'https://github.com/{}/blob/{}/{}#L{}-L{}'.format(nwo, sha, path,
-                                                                                         call['start_point'][0] + 1,
-                                                                                         call['end_point'][0] + 1)
-                            }
-                            dents.append(dent)
-                            edges.append((dent['url'], depended_library_function['url']))
-        return dents, edges
+        # Wait for process to exit
+        self._process.wait()
+        self._process = None
+        self._proxy_url = None
 
-    def process_single_file(self, filepath: PathLike) -> List[Dict[str, Any]]:
-        definitions = self.get_function_definitions(filepath)
-        if definitions is None:
-            return []
-        _, _, functions = definitions
+    async def configure(self, file_path: str, work_dir: str):
+        """Send configuration to the proxy."""
+        if not self._proxy_url:
+            raise RuntimeError("Proxy not started")
 
-        return [self.extract_function_data(func, '', '', '') for func in functions if len(func['function_tokens']) > 1]
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self._proxy_url}/config",
+                json={"filePath": file_path, "workDir": work_dir},
+            )
+            if resp.status_code != 200:
+                raise RuntimeError(f"Proxy config failed with status {resp.status_code}")
 
-    def extract_function_data(self, function: Dict[str, Any], nwo, path: str, sha: str):
+    async def get_exchanges(self) -> list[dict[str, Any]]:
+        """Retrieve the captured HTTP exchanges from the proxy."""
+        if not self._proxy_url:
+            raise RuntimeError("Proxy not started")
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{self._proxy_url}/exchanges")
+            return resp.json()
+
+    async def set_copilot_user_by_token(self, token: str, response: dict[str, Any]) -> None:
+        """Register a per-token response for /copilot_internal/user."""
+        if not self._proxy_url:
+            raise RuntimeError("Proxy not started")
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self._proxy_url}/copilot-user-config",
+                json={"token": token, "response": response},
+            )
+            assert resp.status_code == 200
+
+    @property
+    def url(self) -> str | None:
+        """Return the proxy URL, or None if not started."""
+        return self._proxy_url
+
+    def get_proxy_env(self) -> dict[str, str]:
+        """Return environment variables that route HTTPS traffic through the CONNECT proxy."""
+        if not self._connect_proxy_url or not self._ca_file_path:
+            return {}
+
+        no_proxy = "127.0.0.1,localhost,::1"
         return {
-            'nwo': nwo,
-            'sha': sha,
-            'path': path,
-            'language': self.language,
-            'identifier': function['identifier'],
-            'parameters': function.get('parameters', ''),
-            'argument_list': function.get('argument_list', ''),
-            'return_statement': function.get('return_statement', ''),
-            'docstring': function['docstring'].strip(),
-            'docstring_summary': function['docstring_summary'].strip(),
-            'docstring_tokens': tokenize_docstring(function['docstring_summary']),
-            'function': function['function'].strip(),
-            'function_tokens': function['function_tokens'],
-            'url': 'https://github.com/{}/blob/{}/{}#L{}-L{}'.format(nwo, sha, path, function['start_point'][0] + 1,
-                                                                     function['end_point'][0] + 1)
+            "HTTP_PROXY": self._connect_proxy_url,
+            "HTTPS_PROXY": self._connect_proxy_url,
+            "http_proxy": self._connect_proxy_url,
+            "https_proxy": self._connect_proxy_url,
+            "NO_PROXY": no_proxy,
+            "no_proxy": no_proxy,
+            "NODE_EXTRA_CA_CERTS": self._ca_file_path,
+            "SSL_CERT_FILE": self._ca_file_path,
+            "REQUESTS_CA_BUNDLE": self._ca_file_path,
+            "CURL_CA_BUNDLE": self._ca_file_path,
+            "GIT_SSL_CAINFO": self._ca_file_path,
+            "GH_TOKEN": "",
+            "GITHUB_TOKEN": "",
+            "GH_ENTERPRISE_TOKEN": "",
+            "GITHUB_ENTERPRISE_TOKEN": "",
         }
-
-    def get_context_and_function_calls(self, filepath: str) -> Optional[Tuple[str, str, List, List]]:
-        nwo = '/'.join(filepath.split('/')[3:5])
-        path = '/'.join(filepath.split('/')[5:])
-        if any(fp in path.lower() for fp in self.language_parser.FILTER_PATHS):
-            return None
-        try:
-            with open(filepath) as source_code:
-                blob = source_code.read()
-            tree = DataProcessor.PARSER.parse(blob.encode())
-            return (nwo, path, self.language_parser.get_context(tree, blob), self.language_parser.get_calls(tree, blob))
-        except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError, ValueError, OSError):
-            return None
-
-    def get_function_definitions(self, filepath: str) -> Optional[Tuple[str, str, List]]:
-        nwo = '/'.join(filepath.split('/')[3:5])
-        path = '/'.join(filepath.split('/')[5:])
-        if any(fp in path.lower() for fp in self.language_parser.FILTER_PATHS):
-            return None
-        try:
-            with open(filepath) as source_code:
-                blob = source_code.read()
-            tree = DataProcessor.PARSER.parse(blob.encode())
-            return (nwo, path, self.language_parser.get_definition(tree, blob))
-        except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError, ValueError, OSError):
-            return None
-
-
-if __name__ == '__main__':
-    args = docopt(__doc__)
-
-    repository_dependencies = pd.read_csv(args['INPUT_DIR'] + 'repository_dependencies-1.4.0-2018-12-22.csv', index_col=False)
-    projects = pd.read_csv(args['INPUT_DIR'] + 'projects_with_repository_fields-1.4.0-2018-12-22.csv', index_col=False)
-
-    repository_dependencies['Manifest Platform'] = repository_dependencies['Manifest Platform'].apply(lambda x: x.lower())
-    id_to_nwo = {project['ID']: project['Repository Name with Owner'] for project in projects[['ID', 'Repository Name with Owner']].dropna().to_dict(orient='records')}
-    nwo_to_name = {project['Repository Name with Owner']: project['Name'] for project in projects[['Repository Name with Owner', 'Name']].dropna().to_dict(orient='records')}
-
-    filtered = repository_dependencies[(repository_dependencies['Host Type'] == 'GitHub') & (repository_dependencies['Manifest Platform'] == LANGUAGE_METADATA[args['--language']]['platform'])][['Repository Name with Owner', 'Dependency Project ID']].dropna().to_dict(orient='records')
-
-    dependency_pairs = [(rd['Repository Name with Owner'], id_to_nwo[int(rd['Dependency Project ID'])])
-                        for rd in filtered if int(rd['Dependency Project ID']) in id_to_nwo]
-
-    dependency_pairs = list(set(dependency_pairs))
-
-    dents, dees = zip(*dependency_pairs)
-    # dents = list(set(dents))
-    dees = list(set(dees))
-
-    DataProcessor.PARSER.set_language(Language(args['--tree-sitter-build'], args['--language']))
-
-    processor = DataProcessor(language=args['--language'],
-                              language_parser=LANGUAGE_METADATA[args['--language']]['language_parser'])
-
-    with Pool(processes=int(args['--processes'])) as pool:
-        output = pool.imap_unordered(functools.partial(processor.process_dee,
-                                                       ext=LANGUAGE_METADATA[args['--language']]['ext']),
-                                     dees)
-
-    definitions = list(flatten(output))
-    with open(args['OUTPUT_DIR'] + '{}_definitions.pkl'.format(args['--language']), 'wb') as f:
-        pickle.dump(definitions, f)
-
-    license_filter_file = args.get('--license-filter')
-    if license_filter_file is not None:
-        with open(license_filter_file, 'rb') as f:
-            license_filter = pickle.load(f)
-        valid_nwos = dict([(l[0], l[3]) for l in license_filter])
-
-        # Sort function definitions with repository popularity
-        definitions = [dict(list(d.items()) + [('score', valid_nwos[d['nwo']])]) for d in definitions if d['nwo'] in valid_nwos]
-        definitions = sorted(definitions, key=lambda x: -x['score'])
-
-        # dedupe
-        seen = set()
-        filtered = []
-        for d in definitions:
-            if ' '.join(d['function_tokens']) not in seen:
-                filtered.append(d)
-                seen.add(' '.join(d['function_tokens']))
-
-        dd = DuplicateDetector(min_num_tokens_per_document=10)
-        filter_mask = [dd.add_file(id=idx,
-                                   tokens=d['function_tokens'],
-                                   language=d['language']) for idx, d in enumerate(filtered)]
-        exclusion_set = dd.compute_ids_to_exclude()
-        exclusion_mask = [idx not in exclusion_set for idx, _ in enumerate(filtered)]
-        filtered = [d for idx, d in enumerate(filtered) if filter_mask[idx] & exclusion_mask[idx]]
-
-        with open(args['OUTPUT_DIR'] + '{}_dedupe_definitions.pkl'.format(args['--language']), 'wb') as f:
-            pickle.dump(filtered, f)

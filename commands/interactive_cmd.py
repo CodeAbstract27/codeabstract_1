@@ -22,10 +22,19 @@ from ui import prompts
 
 def run_interactive():
     """Run the interactive guided workflow."""
+    from rich.box import ROUNDED
+    from rich.panel import Panel
     console = get_console()
 
-    console.print("\n[header]CodeAbstract — Interactive Mode[/header]\n")
-    console.print("This wizard will guide you through the full workflow.\n")
+    console.print()
+    console.print(Panel(
+        "[bold #d77757]CodeAbstract[/bold #d77757] — secure, privacy-preserving LLM code assistant\n"
+        "[dim]Guided interactive workflow[/dim]",
+        border_style="#d77757",
+        box=ROUNDED,
+        expand=False,
+    ))
+    console.print()
 
     # Step 1: Get file path
     file_path = prompts.ask_file_path()
@@ -107,6 +116,7 @@ def run_interactive():
         )
 
     console.print("\n[success]✓ Translation complete![/success]\n")
+    from rich.box import ROUNDED
     from rich.panel import Panel
-    panel = Panel(translated, title="Translated Feedback", border_style="cyan", expand=False)
+    panel = Panel(translated, title="Translated Feedback", border_style="#d77757", box=ROUNDED, expand=False)
     console.print(panel)

@@ -36,7 +36,7 @@ class AbstractionResult:
 def abstract(
     source_code: str,
     context_window: int = 3,
-    privacy_level: str = "medium",
+    privacy_level: str = "high",
 ) -> AbstractionResult:
     """
     ABSTRACT(S, k) — Semantic Abstraction Algorithm.
@@ -74,7 +74,7 @@ def abstract(
     # Step 2: Initialize data structures
     # ───────────────────────────────────────────────────
     mapping_table: Dict[str, Dict] = {}  # M in the algorithm
-    counters = {'FUNC': 0, 'VAR': 0, 'SECRET': 0, 'CONST': 0}
+    counters = {'FUNC': 0, 'VAR': 0, 'SECRET': 0, 'CONST': 0, 'CLASS': 0}
     seen: Dict[str, str] = {}            # name → token cache for consistency
 
     # Step 3: Token generator
@@ -90,10 +90,35 @@ def abstract(
     }
 
     # ───────────────────────────────────────────────────
-    # Step 5: Traverse AST
+    # Step 5a: Build parent map (needed to swap Constant → Name nodes)
+    # ───────────────────────────────────────────────────
+    parent_map: Dict[int, ast.AST] = {}
+    for node in ast.walk(ast_tree):
+        for child in ast.iter_child_nodes(node):
+            parent_map[id(child)] = node
+
+    # ───────────────────────────────────────────────────
+    # Step 5b: Collect Constant nodes inside f-strings (JoinedStr)
+    #          Only Constants are skipped (literal text fragments);
+    #          Name nodes inside f-strings are still abstracted.
+    # ───────────────────────────────────────────────────
+    fstring_children: set = set()
+    for node in ast.walk(ast_tree):
+        if isinstance(node, ast.JoinedStr):
+            for child in ast.walk(node):
+                if isinstance(child, ast.Constant):
+                    fstring_children.add(id(child))
+
+    # ───────────────────────────────────────────────────
+    # Step 5c: Traverse AST
     # ───────────────────────────────────────────────────
     for node in ast.walk(ast_tree):
         stats['total_nodes'] += 1
+
+        # Skip nodes inside f-strings (prevents f-string corruption)
+        if id(node) in fstring_children:
+            stats['skipped_nodes'] += 1
+            continue
 
         # Step 6: Skip non-significant nodes
         if not is_semantically_significant(node):
@@ -125,8 +150,16 @@ def abstract(
             # Reuse existing token for consistency
             token = seen[node_name]
         else:
+            # Determine effective node type for prefix selection.
+            # If this Attribute is the func of a Call, treat as method → FUNC.
+            node_type_name = type(node).__name__
+            if isinstance(node, ast.Attribute):
+                parent = parent_map.get(id(node))
+                if isinstance(parent, ast.Call) and parent.func is node:
+                    node_type_name = 'FunctionDef'  # → FUNC prefix
+
             # Generate new token
-            prefix = label_to_prefix(label, type(node).__name__)
+            prefix = label_to_prefix(label, node_type_name)
             token = token_gen.generate(prefix)
 
             # Extract context (need lineno)
@@ -146,7 +179,7 @@ def abstract(
             seen[node_name] = token
 
         # Step 9: Replace node in AST
-        _replace_node_name(node, token)
+        _replace_node_name(node, token, parent_map)
         stats['abstracted_nodes'] += 1
 
     # ───────────────────────────────────────────────────
@@ -187,13 +220,25 @@ def _get_node_name(node: ast.AST) -> Optional[str]:
         return node.name
     elif isinstance(node, ast.arg):
         return node.arg
+    elif isinstance(node, ast.Attribute):
+        return node.attr
     elif isinstance(node, ast.Constant):
         return str(node.value)
     return None
 
 
-def _replace_node_name(node: ast.AST, token: str):
-    """Replace the node's identifier with the given token."""
+def _replace_node_name(
+    node: ast.AST,
+    token: str,
+    parent_map: Optional[Dict[int, ast.AST]] = None,
+):
+    """
+    Replace the node's identifier with the given token.
+
+    For Constant nodes, swaps the node with an ast.Name so that
+    ast.unparse() emits the token *unquoted* (e.g. ``CONST_1``
+    instead of ``'CONST_1'``).
+    """
     if isinstance(node, ast.Name):
         node.id = token
     elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -202,8 +247,43 @@ def _replace_node_name(node: ast.AST, token: str):
         node.name = token
     elif isinstance(node, ast.arg):
         node.arg = token
-    # Note: For Constant nodes we'd ideally replace the parent reference,
-    # but ast.unparse handles the token string from the mapping.
+    elif isinstance(node, ast.Attribute):
+        node.attr = token
+    elif isinstance(node, ast.Constant):
+        # Swap Constant → Name so unparse doesn't add quotes
+        replacement = ast.Name(id=token, ctx=ast.Load())
+        ast.copy_location(node, replacement)
+        if parent_map is not None:
+            parent = parent_map.get(id(node))
+            if parent:
+                _swap_child(parent, node, replacement)
+                return
+        # Fallback: modify value in-place (will be quoted)
+        node.value = token
+
+
+def _swap_child(
+    parent: ast.AST,
+    old_node: ast.AST,
+    new_node: ast.AST,
+):
+    """
+    Replace *old_node* with *new_node* inside *parent*.
+
+    Walks every field of the parent AST node.  If the field holds
+    a single node reference, it is replaced directly via setattr.
+    If the field holds a list (e.g. ``body``, ``targets``), the
+    matching element is swapped in-place.
+    """
+    for field, value in ast.iter_fields(parent):
+        if value is old_node:
+            setattr(parent, field, new_node)
+            return
+        if isinstance(value, list):
+            for i, item in enumerate(value):
+                if item is old_node:
+                    value[i] = new_node
+                    return
 
 
 def _should_abstract(label: str, privacy_level: str) -> bool:
@@ -220,7 +300,7 @@ def _should_abstract(label: str, privacy_level: str) -> bool:
     if privacy_level == "low":
         return label == 'SECRET'
     elif privacy_level == "medium":
-        return label in ('SECRET', 'VALUE')
+        return label in ('SECRET','VALUE')
     elif privacy_level in ("high", "critical"):
         return True  # Abstract everything
     else:

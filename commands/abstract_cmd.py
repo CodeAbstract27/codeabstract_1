@@ -23,7 +23,7 @@ from ui.formatters import (
 
 def run_abstract(
     file: str,
-    privacy: str = "medium",
+    privacy: str = "high",
     context_window: int = 3,
     output: str = None,
     copy: bool = False,
