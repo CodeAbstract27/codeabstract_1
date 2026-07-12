@@ -6,7 +6,7 @@ Implements formal Algorithm 1 from specification.
 Performs AST-based semantic abstraction to transform proprietary
 Python code into privacy-safe intermediate representation.
 """
-
+"""Formal Algorithm -1"""
 import ast
 import uuid
 from dataclasses import dataclass, field
