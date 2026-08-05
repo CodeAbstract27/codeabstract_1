@@ -71,39 +71,60 @@ To use the automated code review feature (`codeabstract review`), you must confi
 
 ---
 
-## 💻 Usage Guide
+## 🏃 How to Run
 
-
-### 1. The Interactive Wizard (Recommended)
-The easiest way to use CodeAbstract is through the interactive mode. It will guide you step-by-step through selecting a file, abstracting it, copying the code to your LLM, and translating the response.
+### 1. Activate Virtual Environment
+Ensure your virtual environment is active:
 ```powershell
-codeabstract interactive
+# Windows PowerShell
+.\.venv\Scripts\activate
+
+# Windows CMD
+.\.venv\Scripts\activate.bat
+
+# Linux / macOS
+source .venv/bin/activate
 ```
 
-### 2. Manual Workflow: Abstracting Code
-You can manually abstract a Python file to prepare it for an LLM:
-```powershell
-codeabstract abstract path/to/your_file.py --copy --show-mapping
-```
-*The `--copy` flag automatically copies the safe, abstracted code to your clipboard. A **Session ID** will be printed to your terminal.*
+### 2. Execution Options
+You can run commands using `python cli.py <command>` or `codeabstract <command>`.
 
-### 3. Manual Workflow: Translating Responses
-Once ChatGPT or Claude gives you an answer (using the abstract tokens), translate it back to your original variables:
+#### 🧙 Interactive Guided Wizard (Recommended)
+The interactive wizard guides you step-by-step through selecting a file, abstracting code, copying to clipboard, and translating responses:
 ```powershell
-# Using direct text
-codeabstract translate <SESSION_ID> "The bug is in FUNC_0."
-
-# Or reading the LLM's response from a text file
-codeabstract translate <SESSION_ID> --file response.txt
+python cli.py interactive
+# Or: codeabstract interactive
 ```
 
-### 4. Managing Sessions
-All abstraction sessions are securely saved locally.
+#### 🤖 Automated Code Review (Uses `.env` API Key)
+Runs end-to-end abstraction, sends the code to Gemini, and translates the response back automatically:
 ```powershell
-codeabstract sessions list           # View recent sessions
-codeabstract sessions show <ID>      # View details of a specific session
-codeabstract sessions delete <ID>    # Delete a session
-codeabstract stats                   # View global usage statistics
+python cli.py review demo_payment.py
+```
+
+#### 🔒 Manual Workflow: Abstracting Code
+Parses a Python file, replaces sensitive identifiers with privacy-optimized tokens, and copies safe code to your clipboard:
+```powershell
+python cli.py abstract path/to/your_file.py --copy --show-mapping
+```
+
+#### 🔄 Manual Workflow: Translating Responses
+Translates LLM response tokens back to your original code variable names:
+```powershell
+# Using direct text response from LLM
+python cli.py translate <SESSION_ID> "The bug is in FUNC_0."
+
+# Reading from a saved response text file
+python cli.py translate <SESSION_ID> --file response.txt
+```
+
+#### 📊 Session & Statistics Management
+View saved local sessions and global usage statistics:
+```powershell
+python cli.py sessions list           # View recent sessions
+python cli.py sessions show <ID>      # View details of a specific session
+python cli.py sessions delete <ID>    # Delete a session
+python cli.py stats                   # View global usage statistics
 ```
 
 ---
