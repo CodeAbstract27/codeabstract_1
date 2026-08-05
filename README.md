@@ -100,6 +100,7 @@ python cli.py interactive
 Runs end-to-end abstraction, sends the code to Gemini, and translates the response back automatically:
 ```powershell
 python cli.py review demo_payment.py
+# Or: codeabstract review demo_payment.py
 ```
 
 #### 🔒 Manual Workflow: Abstracting Code
