@@ -74,7 +74,7 @@ def abstract(
     # Step 2: Initialize data structures
     # ───────────────────────────────────────────────────
     mapping_table: Dict[str, Dict] = {}  # M in the algorithm
-    counters = {'FUNC': 0, 'VAR': 0, 'SECRET': 0, 'CONST': 0, 'CLASS': 0}
+    counters = {'FUNC': 0, 'VAR': 0, 'SECRET': 0, 'CONST': 0, 'CLASS': 0, 'NUM': 0}
     seen: Dict[str, str] = {}            # name → token cache for consistency
 
     # Step 3: Token generator
@@ -159,7 +159,7 @@ def abstract(
                     node_type_name = 'FunctionDef'  # → FUNC prefix
 
             # Generate new token
-            prefix = label_to_prefix(label, node_type_name)
+            prefix = label_to_prefix(label, node_type_name, node)
             token = token_gen.generate(prefix)
 
             # Extract context (need lineno)
