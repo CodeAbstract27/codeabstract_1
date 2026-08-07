@@ -88,6 +88,48 @@ def stats():
     run_stats()
 
 
+@app.command()
+def evaluate(
+    privacy: str = typer.Option(
+        "high",
+        "--privacy-level", "-p",
+        help="Privacy level to evaluate: low|medium|high|critical",
+    ),
+    output: str = typer.Option(
+        "evaluation_output",
+        "--output", "-o",
+        help="Directory to save JSON and Markdown reports",
+    ),
+    no_terminal: bool = typer.Option(
+        False, "--no-terminal",
+        help="Skip terminal display; only save report files",
+    ),
+    skip_performance: bool = typer.Option(
+        False, "--skip-performance",
+        help="Skip performance benchmarks for a faster run",
+    ),
+):
+    """
+    Run the full evaluation suite across all 5 metric pillars.
+
+    Measures: PIR (privacy), RF (reconstruction), F1 (classification),
+    CSP (structure), and Performance. Saves JSON + Markdown reports.
+    """
+    import sys, os
+    sys.argv = [
+        "run_eval.py",
+        "--privacy-level", privacy,
+        "--output", output,
+    ]
+    if no_terminal:
+        sys.argv.append("--no-terminal")
+    if skip_performance:
+        sys.argv.append("--skip-performance")
+
+    from evaluation.run_eval import main as run_eval_main
+    run_eval_main()
+
+
 # ═══════════════════════════════════════════════════════════
 # Sessions sub-commands
 # ═══════════════════════════════════════════════════════════
