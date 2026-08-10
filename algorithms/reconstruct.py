@@ -102,11 +102,11 @@ def _extract_tokens(text: str) -> List[str]:
     """
     Extract all abstraction tokens from text.
 
-    Pattern: (FUNC|VAR|SECRET|CONST)_\\d+
+    Pattern: (FUNC|VAR|SECRET|CONST|NUM|CLASS)_\\d+
 
     Returns a deduplicated list preserving first-occurrence order.
     """
-    pattern = r'\b((?:FUNC|VAR|SECRET|CONST)_\d+)\b'
+    pattern = r'\b((?:FUNC|VAR|SECRET|CONST|NUM|CLASS)_\d+)\b'
     matches = re.findall(pattern, text)
 
     # Deduplicate while preserving order

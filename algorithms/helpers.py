@@ -102,7 +102,7 @@ def _extract_name(node: ast.AST) -> Optional[str]:
     return None
 
 
-def label_to_prefix(label: str, node_type: str) -> str:
+def label_to_prefix(label: str, node_type: str, node: ast.AST = None) -> str:
     """
     LabelToPrefix(label, type) — Token Prefix Selector.
 
@@ -112,9 +112,10 @@ def label_to_prefix(label: str, node_type: str) -> str:
     Args:
         label: Classification label ('SECRET', 'VALUE', or 'IDENTIFIER').
         node_type: Name of the AST node type (e.g. 'FunctionDef', 'Name').
+        node: Optional AST node for finer-grained type detection.
 
     Returns:
-        Token prefix string: 'SECRET', 'FUNC', 'CONST', or 'VAR'.
+        Token prefix string: 'SECRET', 'FUNC', 'NUM', 'CONST', or 'VAR'.
 
     Implements:
         LabelToPrefix helper from formal specification.
@@ -131,8 +132,10 @@ def label_to_prefix(label: str, node_type: str) -> str:
     if node_type == 'ClassDef':
         return 'CLASS'
 
-    # Rule 4: Constants → "CONST"
+    # Rule 4: Numeric constants → "NUM", other constants → "CONST"
     if node_type == 'Constant':
+        if node is not None and isinstance(node, ast.Constant) and isinstance(node.value, (int, float, complex)):
+            return 'NUM'
         return 'CONST'
 
     # Rule 5: Default → "VAR"
