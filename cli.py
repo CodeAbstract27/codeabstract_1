@@ -82,6 +82,15 @@ def review(
 
 
 @app.command()
+def audit(
+    file: str = typer.Argument(..., help="Path to Python source file"),
+):
+    """Audit source code for privacy risk and exposure score."""
+    from commands.audit_cmd import run_audit
+    run_audit(file)
+
+
+@app.command()
 def stats():
     """Display usage statistics."""
     from commands.stats_cmd import run_stats
