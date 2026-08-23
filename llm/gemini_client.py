@@ -31,7 +31,7 @@ TASK_PROMPTS = {
 
 class GeminiClient:
     
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-3.6-flash"):
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(
             model_name=model,

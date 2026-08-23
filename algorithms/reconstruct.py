@@ -9,9 +9,50 @@ formatted source context blocks.
 """
 
 import re
+from dataclasses import dataclass, field
 from typing import Dict, List
 
 from algorithms.encrypt import decrypt_mapping
+
+
+# ═══════════════════════════════════════════════════════════
+# Structured result type
+# ═══════════════════════════════════════════════════════════
+
+@dataclass
+class ReconstructResult:
+    """Structured output from the reconstruct algorithm.
+
+    Attributes:
+        review_text: The review/feedback with clean identifier names
+                     (no line-number noise).
+        references:  Deduplicated list of referenced identifiers with
+                     name, line number, type prefix, and source context.
+    """
+    review_text: str = ""
+    references: List[Dict] = field(default_factory=list)
+
+    def __str__(self) -> str:
+        """Render the full output as a plain string (backward compat)."""
+        parts = [self.review_text]
+        if self.references:
+            parts.append("")
+            parts.append(_format_context_blocks(self.references))
+        return "\n".join(parts)
+
+
+# ═══════════════════════════════════════════════════════════
+# Token prefix → human-readable type label
+# ═══════════════════════════════════════════════════════════
+
+_PREFIX_LABELS = {
+    "FUNC": "Function",
+    "CLASS": "Class",
+    "SECRET": "Secret",
+    "VAR": "Variable",
+    "CONST": "Constant",
+    "NUM": "Number",
+}
 
 
 def reconstruct(
@@ -23,8 +64,8 @@ def reconstruct(
     RECONSTRUCT(R, M̃, K) — Context-Aware Reconstruction Algorithm.
 
     Decrypts the mapping table, finds all abstraction tokens in the
-    LLM response, replaces them with ``original_name (line N)``
-    references, and appends formatted source-context blocks.
+    LLM response, replaces them with clean identifier names,
+    and appends formatted source-context blocks.
 
     Args:
         llm_response: Abstract LLM response R containing tokens.
@@ -39,6 +80,29 @@ def reconstruct(
 
     Implements:
         Algorithm 3 from formal specification.
+    """
+    result = reconstruct_structured(llm_response, encrypted_mapping, encryption_key)
+    return str(result)
+
+
+def reconstruct_structured(
+    llm_response: str,
+    encrypted_mapping: bytes,
+    encryption_key: bytes,
+) -> ReconstructResult:
+    """
+    RECONSTRUCT(R, M̃, K) — Structured Reconstruction.
+
+    Like ``reconstruct()`` but returns a ``ReconstructResult`` so
+    callers can render the review text and reference table separately.
+
+    Args:
+        llm_response: Abstract LLM response R containing tokens.
+        encrypted_mapping: Encrypted mapping table M̃ (bytes).
+        encryption_key: Encryption key K (bytes).
+
+    Returns:
+        ReconstructResult with clean review_text and references list.
     """
     # ───────────────────────────────────────────────────
     # Step 1: Decrypt mapping table
@@ -56,9 +120,10 @@ def reconstruct(
     final_response: str = llm_response
 
     # ───────────────────────────────────────────────────
-    # Step 4: Initialize context blocks
+    # Step 4: Track references (deduplicated by name)
     # ───────────────────────────────────────────────────
-    context_blocks: List[Dict] = []
+    seen_names: set = set()
+    references: List[Dict] = []
 
     # ───────────────────────────────────────────────────
     # Step 5-11: Process each token
@@ -70,28 +135,31 @@ def reconstruct(
 
         # Step 7: Retrieve mapping entry
         entry = mapping_table[token]
+        name = entry['name']
+        lineno = entry['lineno']
 
-        # Step 8: Create human-readable reference
-        reference = f"{entry['name']} (line {entry['lineno']})"
+        # Step 8: Determine the token prefix for type labeling
+        prefix = token.split("_")[0] if "_" in token else "VAR"
+        type_label = _PREFIX_LABELS.get(prefix, "Identifier")
 
-        # Step 9: Replace all occurrences of token with reference
-        final_response = final_response.replace(token, reference)
+        # Step 9: Replace token with just the clean name
+        final_response = final_response.replace(token, name)
 
-        # Step 10: Collect context block
-        context_blocks.append({
-            'name': entry['name'],
-            'lineno': entry['lineno'],
-            'ctx': entry.get('ctx', {}),
-        })
+        # Step 10: Collect reference (deduplicated by name)
+        if name not in seen_names:
+            seen_names.add(name)
+            references.append({
+                'name': name,
+                'lineno': lineno,
+                'type': type_label,
+                'prefix': prefix,
+                'ctx': entry.get('ctx', {}),
+            })
 
-    # ───────────────────────────────────────────────────
-    # Step 12-13: Append formatted context blocks
-    # ───────────────────────────────────────────────────
-    if context_blocks:
-        formatted_ctx = _format_context_blocks(context_blocks)
-        final_response = f"{final_response}\n\n{formatted_ctx}"
-
-    return final_response
+    return ReconstructResult(
+        review_text=final_response,
+        references=references,
+    )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -119,12 +187,13 @@ def _extract_tokens(text: str) -> List[str]:
     return unique
 
 
-def _format_context_blocks(blocks: List[Dict]) -> str:
+def _format_context_blocks(references: List[Dict]) -> str:
     """
     Format context blocks for appending to translated output.
 
-    Produces a readable listing showing each referenced identifier
-    with its surrounding source lines, with the target line marked.
+    Shows only significant identifiers (Functions, Classes, Secrets)
+    with their surrounding source lines, plus a compact reference
+    list for all others.
 
     Format example::
 
@@ -138,15 +207,21 @@ def _format_context_blocks(blocks: List[Dict]) -> str:
           47 │
 
     """
-    if not blocks:
+    if not references:
         return ""
 
-    lines = ["─── Source Context ────────────────────────────────"]
+    # Separate significant (show full context) from minor (compact list)
+    significant_prefixes = {"FUNC", "CLASS", "SECRET"}
+    significant = [r for r in references if r.get('prefix') in significant_prefixes]
+    minor = [r for r in references if r.get('prefix') not in significant_prefixes]
 
-    for block in blocks:
-        name = block.get('name', '???')
-        lineno = block.get('lineno', '?')
-        ctx = block.get('ctx', {})
+    lines = ["─── Source References ─────────────────────────────"]
+
+    # Full context blocks for significant identifiers
+    for ref in significant:
+        name = ref.get('name', '???')
+        lineno = ref.get('lineno', '?')
+        ctx = ref.get('ctx', {})
 
         lines.append(f"\n{name} (line {lineno}):\n")
 
@@ -163,6 +238,16 @@ def _format_context_blocks(blocks: List[Dict]) -> str:
             lines.append("  (no context available)")
 
         lines.append("")  # Blank line after each block
+
+    # Compact list for minor identifiers
+    if minor:
+        lines.append("\nOther referenced identifiers:\n")
+        for ref in minor:
+            name = ref.get('name', '???')
+            lineno = ref.get('lineno', '?')
+            type_label = ref.get('type', 'Identifier')
+            lines.append(f"  • {name} (line {lineno}) — {type_label}")
+        lines.append("")
 
     lines.append("───────────────────────────────────────────────────")
     return '\n'.join(lines)
