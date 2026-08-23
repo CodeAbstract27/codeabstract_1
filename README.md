@@ -1,4 +1,4 @@
-# 🛡️ CodeAbstract
+# CodeAbstract
 
 <div align="center">
 
@@ -13,65 +13,65 @@
 
 *Safely consult cloud LLMs (Google Gemini, OpenAI GPT, Anthropic Claude) on sensitive, proprietary code without leaking intellectual property, API keys, credentials, or business logic.*
 
-[Key Features](#-key-features) •
-[Architecture](#-system-architecture) •
-[How It Works](#-the-4-core-algorithms) •
-[Quick Start](#-quick-start) •
-[CLI Usage](#-cli-command-reference) •
-[Privacy Levels](#-privacy-hierarchy) •
-[Evaluation](#-empirical-evaluation--benchmarks) •
-[Security Model](#-security--threat-model)
+[Key Features](#key-features) •
+[Architecture](#system-architecture) •
+[How It Works](#the-4-core-algorithms) •
+[Quick Start](#quick-start) •
+[CLI Usage](#cli-command-reference) •
+[Privacy Levels](#privacy-hierarchy) •
+[Evaluation](#empirical-evaluation--benchmarks) •
+[Security Model](#security--threat-model)
 
 </div>
 
 ---
 
-## 📖 Overview
+## Overview
 
 Modern software development relies heavily on Large Language Models (LLMs) for code reviews, bug remediation, security auditing, and performance optimization. However, pasting proprietary codebase snippets into commercial LLM endpoints creates **severe intellectual property (IP) and privacy exposure risks**, including leaks of:
 
-- 🔑 **API keys, secrets, and auth tokens**
-- 💼 **Proprietary business algorithms, formulas, and pricing models**
-- 🌐 **Internal endpoints, routing topologies, and hostnames**
-- 👤 **Customer identifiers and database schema variables**
+- **API keys, secrets, and auth tokens**
+- **Proprietary business algorithms, formulas, and pricing models**
+- **Internal endpoints, routing topologies, and hostnames**
+- **Customer identifiers and database schema variables**
 
 **CodeAbstract** eliminates this privacy-utility tradeoff. It transforms Python source code into a privacy-optimized intermediate representation via **client-side Abstract Syntax Tree (AST) semantic abstraction**. All mapping states are locally encrypted with AES-128-CBC + HMAC-SHA256 (Fernet) in SQLite. When the LLM responds, CodeAbstract seamlessly reconstructs the suggestions back into the developer's original code context with precise line coordinates.
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
-- 🌳 **AST-Based Semantic Abstraction**: Parses Python into an AST, replacing identifiers, function names, and sensitive literals with type-tagged tokens (`FUNC_0`, `VAR_1`, `SECRET_0`, `VALUE_0`) while preserving 100% of executable syntax and control flow.
-- 🎯 **Sensitivity Classification**: Regex and heuristic classification engines tag AST nodes across `SECRET`, `VALUE`, and `IDENTIFIER` categories.
-- 🎚️ **4-Tier Privacy Hierarchy**: Configurable privacy levels (`low`, `medium`, `high`, `critical`) tailored for different compliance requirements.
-- 🔐 **Encrypted Local Storage**: Zero cloud leakage of mappings. All bidirectional maps are encrypted using Fernet (AES-128-CBC + HMAC-SHA256) and saved in a local SQLite database.
-- 🔄 **Context-Aware Reconstruction**: Automatically maps LLM feedback tokens back to your original source names and attaches multi-line context windows ($\pm k$ lines) for effortless manual application.
-- 🤖 **End-to-End Automated Review**: Built-in LLM integration (Google Gemini) that abstracts, queries the model with task-specific system prompts (`review`, `debug`, `optimize`, `security`, `explain`), and reconstructs the response in one command.
-- 🧙 **Interactive Terminal Wizard**: Rich, terminal-native UI built with Typer, Rich, Pygments, and Questionary with seamless clipboard copy/paste support.
-- 📊 **5-Pillar Evaluation Suite**: Built-in benchmarking suite measuring Privacy Information Ratio (PIR), Reconstruction Fidelity, F1 Classification Accuracy, AST Isomorphism, and Performance.
+- **AST-Based Semantic Abstraction** — Parses Python into an AST, replacing identifiers, function names, and sensitive literals with type-tagged tokens (`FUNC_0`, `VAR_1`, `SECRET_0`, `VALUE_0`) while preserving 100% of executable syntax and control flow.
+- **Sensitivity Classification** — Regex and heuristic classification engines tag AST nodes across `SECRET`, `VALUE`, and `IDENTIFIER` categories.
+- **4-Tier Privacy Hierarchy** — Configurable privacy levels (`low`, `medium`, `high`, `critical`) tailored for different compliance requirements.
+- **Encrypted Local Storage** — Zero cloud leakage of mappings. All bidirectional maps are encrypted using Fernet (AES-128-CBC + HMAC-SHA256) and saved in a local SQLite database.
+- **Context-Aware Reconstruction** — Automatically maps LLM feedback tokens back to your original source names and attaches multi-line context windows ($\pm k$ lines) for effortless manual application.
+- **End-to-End Automated Review** — Built-in LLM integration (Google Gemini) that abstracts, queries the model with task-specific system prompts (`review`, `debug`, `optimize`, `security`, `explain`), and reconstructs the response in one command.
+- **Interactive Terminal Wizard** — Rich, terminal-native UI built with Typer, Rich, Pygments, and Questionary with seamless clipboard copy/paste support.
+- **5-Pillar Evaluation Suite** — Built-in benchmarking suite measuring Privacy Information Ratio (PIR), Reconstruction Fidelity, F1 Classification Accuracy, AST Isomorphism, and Performance.
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ```mermaid
 flowchart TD
-    subgraph LocalClient[" 💻 Local Developer Environment (Zero Cloud Leakage) "]
-        Source["📄 Original Source Code (file.py)"]
-        Parser["🌳 AST Parser & Analyzer"]
-        Classifier["🏷️ Sensitivity Classifier (SECRET / VALUE / ID)"]
-        TokenGen["🏷️ Token Generator (FUNC_0, SECRET_1, ...)"]
-        Context["🪟 Context Window Extractor (±k Lines)"]
-        Encryptor["🔐 Fernet AES-128-CBC Encryptor"]
-        SQLite[("💾 Local SQLite DB (Encrypted Mappings)")]
-        Reconstructor["🔄 Feedback Reconstructor & Context Attacher"]
-        FinalFeedback["📋 Actionable Original Code Feedback"]
+    subgraph LocalClient[" Local Developer Environment (Zero Cloud Leakage) "]
+        Source["Original Source Code (file.py)"]
+        Parser["AST Parser & Analyzer"]
+        Classifier["Sensitivity Classifier (SECRET / VALUE / ID)"]
+        TokenGen["Token Generator (FUNC_0, SECRET_1, ...)"]
+        Context["Context Window Extractor (±k Lines)"]
+        Encryptor["Fernet AES-128-CBC Encryptor"]
+        SQLite[("Local SQLite DB (Encrypted Mappings)")]
+        Reconstructor["Feedback Reconstructor & Context Attacher"]
+        FinalFeedback["Actionable Original Code Feedback"]
     end
 
-    subgraph CloudLLM[" ☁️ Cloud LLM Provider (Google Gemini / OpenAI / Anthropic / Manual) "]
-        AbstractCode["🛡️ Abstracted Code (Zero IP/Secrets)"]
-        LLMQuery["🤖 LLM Code Review / Debug / Optimization"]
-        RawResponse["📝 Abstract Response (e.g., 'Fix FUNC_0 by checking VAR_1')"]
+    subgraph CloudLLM[" Cloud LLM Provider (Google Gemini / OpenAI / Anthropic / Manual) "]
+        AbstractCode["Abstracted Code (Zero IP/Secrets)"]
+        LLMQuery["LLM Code Review / Debug / Optimization"]
+        RawResponse["Abstract Response (e.g., 'Fix FUNC_0 by checking VAR_1')"]
     end
 
     Source --> Parser
@@ -92,7 +92,7 @@ flowchart TD
 
 ---
 
-## ⚙️ The 4 Core Algorithms
+## The 4 Core Algorithms
 
 CodeAbstract implements four formal algorithms designed for privacy-preserving code analysis:
 
@@ -121,7 +121,7 @@ CodeAbstract implements four formal algorithms designed for privacy-preserving c
 
 ---
 
-## 🔍 Visual Demonstration: Before & After
+## Visual Demonstration: Before & After
 
 ### 1. Original Sensitive Code (`demo_payment.py`)
 ```python
@@ -161,7 +161,7 @@ def FUNC_0(VAR_0):
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.9 or higher
@@ -196,7 +196,7 @@ pip install -e ".[llm]"
 
 ---
 
-## 🔑 API Key Configuration
+## API Key Configuration
 
 For automated reviews (`codeabstract review`), configure your Google Gemini API key using any of the following methods (listed in order of resolution priority):
 
@@ -209,11 +209,11 @@ For automated reviews (`codeabstract review`), configure your Google Gemini API 
 
 ---
 
-## 💻 CLI Command Reference
+## CLI Command Reference
 
 You can execute commands via `codeabstract <command>` or `python cli.py <command>`.
 
-### 🧙 1. Interactive Guided Wizard (Recommended for Beginners)
+### 1. Interactive Guided Wizard (Recommended for Beginners)
 Launches a visual step-by-step terminal wizard to select files, configure privacy settings, abstract code, copy safely to clipboard, and translate responses.
 
 ```powershell
@@ -222,7 +222,7 @@ codeabstract interactive
 
 ---
 
-### 🛡️ 2. Abstract Code (`abstract`)
+### 2. Abstract Code (`abstract`)
 Transforms proprietary Python code into safe abstracted tokens.
 
 ```powershell
@@ -245,7 +245,7 @@ codeabstract abstract demo_payment.py -o abstracted_code.py -k 5
 
 ---
 
-### 🤖 3. Automated Code Review (`review`)
+### 3. Automated Code Review (`review`)
 Performs the full pipeline: abstracts code, queries Google Gemini with specialized prompts, and automatically reconstructs the response.
 
 ```powershell
@@ -271,7 +271,7 @@ codeabstract review demo_payment.py --task debug -o review_results.md
 
 ---
 
-### 🔄 4. Translate Response (`translate`)
+### 4. Translate Response (`translate`)
 Translates an abstracted LLM response back to original identifiers using a stored session ID.
 
 ```powershell
@@ -289,7 +289,7 @@ codeabstract translate a1b2c3d4 --file response.txt --format markdown -o transla
 
 ---
 
-### 📊 5. Evaluation Suite (`evaluate`)
+### 5. Evaluation Suite (`evaluate`)
 Runs the rigorous 5-pillar scientific benchmark suite to validate privacy leakage, reconstruction accuracy, syntax validity, and throughput.
 
 ```powershell
@@ -305,7 +305,7 @@ codeabstract evaluate --skip-performance
 
 ---
 
-### 🗄️ 6. Session Management (`sessions`)
+### 6. Session Management (`sessions`)
 Manage and inspect encrypted session mappings stored in your local SQLite database.
 
 ```powershell
@@ -324,7 +324,7 @@ codeabstract sessions delete <SESSION_ID> --force
 
 ---
 
-### ⚙️ 7. Configuration & Stats (`config`, `stats`)
+### 7. Configuration & Stats (`config`, `stats`)
 Inspect global application configuration and view usage statistics.
 
 ```powershell
@@ -341,7 +341,7 @@ codeabstract stats
 
 ---
 
-## 🔒 Privacy Hierarchy
+## Privacy Hierarchy
 
 CodeAbstract provides four granular abstraction levels to balance privacy protection against contextual model comprehension:
 
@@ -354,7 +354,7 @@ CodeAbstract provides four granular abstraction levels to balance privacy protec
 
 ---
 
-## 🔬 Empirical Evaluation & Benchmarks
+## Empirical Evaluation & Benchmarks
 
 CodeAbstract is evaluated across **5 fundamental pillars** using a diverse corpus of 10 real-world Python modules (APIs, ML pipelines, e-commerce pricing, authentication, database ORMs, microservices):
 
@@ -362,24 +362,24 @@ CodeAbstract is evaluated across **5 fundamental pillars** using a diverse corpu
 ================================================================================
                            CODEABSTRACT BENCHMARKS
 ================================================================================
-  Pillar 1: Privacy Information Ratio (PIR)     0.0024        (Target: ≤ 0.05)   ✅
-  Pillar 2: Token Hit Rate (Reconstruction)     100.0%        (Target: ≥ 95%)    ✅
-  Pillar 3: Classification Macro-F1             0.8937        (Target: ≥ 0.85)   ✅
-  Pillar 4: AST Isomorphism Score               1.0000        (Target: = 1.00)   ✅
-  Pillar 4: Syntax Validity Rate                100.0%        (Target: = 100%)   ✅
+  Pillar 1: Privacy Information Ratio (PIR)     0.0024        (Target: ≤ 0.05)   PASS
+  Pillar 2: Token Hit Rate (Reconstruction)     100.0%        (Target: ≥ 95%)    PASS
+  Pillar 3: Classification Macro-F1             0.8937        (Target: ≥ 0.85)   PASS
+  Pillar 4: AST Isomorphism Score               1.0000        (Target: = 1.00)   PASS
+  Pillar 4: Syntax Validity Rate                100.0%        (Target: = 100%)   PASS
 ================================================================================
 ```
 
-### Pillar Definitions:
-1. **Privacy Information Ratio (PIR)**: Ratio of residual identifiable proprietary tokens in abstracted output. Score of `0.0024` indicates >99.7% of proprietary tokens are fully concealed.
-2. **Reconstruction Fidelity**: Percentage of abstracted tokens in LLM responses successfully mapped back to the original source (`100.0%`).
-3. **Classification Macro-F1**: Precision/Recall harmonic mean for categorizing `SECRET` (0.97 F1), `VALUE` (0.86 F1), and `IDENTIFIER` (0.85 F1) nodes.
-4. **Code Structure Preservation (CSP)**: Validates that abstracted code is valid Python (`100%`) with an exact 1:1 AST isomorphism score (`1.0000`), ensuring LLMs comprehend the true structural logic.
-5. **Performance & Scalability**: Sub-millisecond abstraction throughput per module.
+### Pillar Definitions
+1. **Privacy Information Ratio (PIR)** — Ratio of residual identifiable proprietary tokens in abstracted output. Score of `0.0024` indicates >99.7% of proprietary tokens are fully concealed.
+2. **Reconstruction Fidelity** — Percentage of abstracted tokens in LLM responses successfully mapped back to the original source (`100.0%`).
+3. **Classification Macro-F1** — Precision/Recall harmonic mean for categorizing `SECRET` (0.97 F1), `VALUE` (0.86 F1), and `IDENTIFIER` (0.85 F1) nodes.
+4. **Code Structure Preservation (CSP)** — Validates that abstracted code is valid Python (`100%`) with an exact 1:1 AST isomorphism score (`1.0000`), ensuring LLMs comprehend the true structural logic.
+5. **Performance & Scalability** — Sub-millisecond abstraction throughput per module.
 
 ---
 
-## 🔒 Security & Threat Model
+## Security & Threat Model
 
 ```
                     ┌──────────────────────────────────────────────┐
@@ -399,14 +399,14 @@ CodeAbstract is evaluated across **5 fundamental pillars** using a diverse corpu
                     └──────────────────────────────────────────────┘
 ```
 
-- **Zero Cloud Exposure of Mappings**: Bidirectional mapping tables are never sent to external servers or LLM providers.
-- **Cryptographic Isolation**: All session mapping tables are encrypted using Fernet (128-bit AES in CBC mode with HMAC-SHA256 for integrity authentication).
-- **Transient Keys**: Encryption keys can be configured per session or tied to the local user profile.
-- **Local SQLite Storage**: Encrypted databases are stored strictly in the user's home directory (`~/.codeabstract/codeabstract.db`) with standard OS file permissions.
+- **Zero Cloud Exposure of Mappings** — Bidirectional mapping tables are never sent to external servers or LLM providers.
+- **Cryptographic Isolation** — All session mapping tables are encrypted using Fernet (128-bit AES in CBC mode with HMAC-SHA256 for integrity authentication).
+- **Transient Keys** — Encryption keys can be configured per session or tied to the local user profile.
+- **Local SQLite Storage** — Encrypted databases are stored strictly in the user's home directory (`~/.codeabstract/codeabstract.db`) with standard OS file permissions.
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 codeabstract/
@@ -462,7 +462,7 @@ codeabstract/
 
 ---
 
-## 🧪 Testing
+## Testing
 
 CodeAbstract includes a full test suite verifying algorithms, AST safety, encryption round-trips, and CLI workflows:
 
@@ -479,7 +479,7 @@ pytest tests/ --cov=. --cov-report=term-missing
 
 ---
 
-## 📦 Dependencies
+## Dependencies
 
 | Package | Version | Purpose |
 |---|---|---|
@@ -493,6 +493,6 @@ pytest tests/ --cov=. --cov-report=term-missing
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
