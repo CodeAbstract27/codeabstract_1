@@ -64,6 +64,8 @@ def get_node_name(node: ast.AST) -> Optional[str]:
         return node.name
     elif isinstance(node, ast.arg):
         return node.arg
+    elif isinstance(node, ast.Attribute):
+        return node.attr
     elif isinstance(node, ast.Constant):
         return str(node.value)
     return None
@@ -93,5 +95,12 @@ def set_node_name(node: ast.AST, token: str) -> bool:
     elif isinstance(node, ast.arg):
         node.arg = token
         return True
-    # Constants are handled specially — replaced with ast.Name in abstract.py
+    elif isinstance(node, ast.Attribute):
+        node.attr = token
+        return True
+    elif isinstance(node, ast.Constant):
+        node.value = token
+        return True
     return False
+
+

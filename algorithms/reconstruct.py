@@ -9,6 +9,7 @@ formatted source context blocks.
 """
 
 import re
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from algorithms.encrypt import decrypt_mapping
@@ -100,6 +101,112 @@ def reconstruct(
 
 
 # ═══════════════════════════════════════════════════════════
+# Structured result type
+# ═══════════════════════════════════════════════════════════
+#
+# reconstruct() above is the original, regression-tested public API:
+# inline "name (line N)" substitution plus an appended Source Context
+# section, exactly as every existing caller (CLI translate, the web
+# interface, the full test suite) expects. reconstruct_structured()
+# below is an additive alternative for a caller that wants the review
+# text and the reference list as separate structured data -- e.g. to
+# render a reference panel instead of appending plain-text context
+# blocks. It reuses _substitute_tokens' single-pass, word-bounded,
+# longest-first substitution (name_only=True) rather than a per-token
+# str.replace() loop, which is exactly the D2 collision bug
+# ("VAR_1" matching inside "VAR_10") this file's substitution
+# strategy exists to prevent -- see _substitute_tokens' docstring.
+
+@dataclass
+class ReconstructResult:
+    """Structured output from the reconstruct algorithm.
+
+    Attributes:
+        review_text: The review/feedback with clean identifier names
+                     (no line-number noise).
+        references:  Deduplicated list of referenced identifiers with
+                     name, line number, type prefix, and source context.
+    """
+    review_text: str = ""
+    references: List[Dict] = field(default_factory=list)
+
+    def __str__(self) -> str:
+        """Render the full output as a plain string (backward compat)."""
+        parts = [self.review_text]
+        if self.references:
+            parts.append("")
+            parts.append(_format_context_blocks(self.references))
+        return "\n".join(parts)
+
+
+# Token prefix → human-readable type label, for reconstruct_structured's
+# reference list.
+_PREFIX_LABELS = {
+    "FUNC": "Function",
+    "CLASS": "Class",
+    "SECRET": "Secret",
+    "VAR": "Variable",
+    "CONST": "Constant",
+    "NUM": "Number",
+}
+
+
+def reconstruct_structured(
+    llm_response: str,
+    encrypted_mapping: bytes,
+    encryption_key: bytes,
+    line_map: Optional[Dict] = None,
+) -> ReconstructResult:
+    """
+    RECONSTRUCT(R, M̃, K) — Structured Reconstruction.
+
+    Like ``reconstruct()`` but returns a ``ReconstructResult`` so a
+    caller can render the review text and reference list separately
+    (e.g. a reference panel keyed by line, rather than plain-text
+    context blocks appended to the end).
+
+    Args:
+        llm_response: Abstract LLM response R containing tokens.
+        encrypted_mapping: Encrypted mapping table M̃ (bytes).
+        encryption_key: Encryption key K (bytes).
+        line_map: Optional ``{abstract_lineno: original_lineno}`` index —
+            see ``reconstruct()``.
+
+    Returns:
+        ReconstructResult with clean review_text and references list.
+    """
+    mapping_table: Dict = decrypt_mapping(encrypted_mapping, encryption_key)
+    llm_response = _translate_line_references(llm_response, line_map)
+
+    tokens = _extract_tokens(llm_response)
+    known_tokens = [t for t in tokens if t in mapping_table]
+
+    review_text = _substitute_tokens(
+        llm_response, known_tokens, mapping_table, name_only=True,
+    )
+
+    # Deduplicated by name, first-occurrence order.
+    seen_names: set = set()
+    references: List[Dict] = []
+    for token in known_tokens:
+        entry = mapping_table[token]
+        name = entry['name']
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+        prefix = token.split("_")[0] if "_" in token else "VAR"
+        references.append({
+            'name': name,
+            'lineno': entry.get('lineno'),
+            'type': _PREFIX_LABELS.get(prefix, "Identifier"),
+            'prefix': prefix,
+            'ctx': entry.get('ctx', {}),
+        })
+
+    return ReconstructResult(review_text=review_text, references=references)
+
+
+# ═══════════════════════════════════════════════════════════
 # Private helpers
 # ═══════════════════════════════════════════════════════════
 
@@ -171,6 +278,7 @@ def _substitute_tokens(
     text: str,
     tokens: List[str],
     mapping_table: Dict,
+    name_only: bool = False,
 ) -> str:
     """
     Replace every token in *text* with its human-readable reference.
@@ -194,6 +302,9 @@ def _substitute_tokens(
         text: The LLM response.
         tokens: Tokens known to be present in the mapping table.
         mapping_table: Decrypted mapping table.
+        name_only: Emit just the original name, with no "(line N)"
+            suffix. Used by reconstruct_structured(), whose caller
+            renders line numbers in a separate reference panel instead.
 
     Returns:
         The response with all known tokens substituted.
@@ -209,6 +320,8 @@ def _substitute_tokens(
 
     def _replace(match: "re.Match") -> str:
         entry = mapping_table[match.group(1)]
+        if name_only:
+            return entry['name']
         return f"{entry['name']} (line {entry['lineno']})"
 
     return pattern.sub(_replace, text)
