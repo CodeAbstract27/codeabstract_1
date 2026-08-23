@@ -46,6 +46,12 @@ openai = [
 anthropic = [
     "anthropic>=0.20.0",
 ]
+# Phase 5: the web interface. Flask rather than Streamlit because the
+# pipeline needs a request boundary to hang masking and validation off,
+# and because a test client can drive it -- see web/app.py.
+web = [
+    "flask>=3.0.0",
+]
 gemini = [
     "google-generativeai>=0.4.0",
 ]
@@ -53,6 +59,13 @@ llm = [
     "openai>=1.0.0",
     "anthropic>=0.20.0",
     "google-generativeai>=0.4.0",
+]
+# Phase 2: the Random Forest baseline. The CodeBERT fine-tune the proposal
+# also specifies is not implemented -- it is gated on the annotated dataset,
+# see docs/UPGRADE_PLAN.md Phase 2.
+ml = [
+    "scikit-learn>=1.3.0",
+    "numpy>=1.24.0",
 ]
 
 
@@ -62,8 +75,12 @@ codeabstract = "cli:app"
 [tool.setuptools]
 py-modules = ["cli"]
 
+[tool.setuptools.package-data]
+web = ["templates/*.html", "static/*"]
+
 [tool.setuptools.packages.find]
 where = ["."]
+exclude = ["tests", "tests.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

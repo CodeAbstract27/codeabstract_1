@@ -1,7 +1,7 @@
 """
 CodeAbstract Evaluation Runner
 
-Entry point to run the full evaluation suite across all 5 metric pillars.
+Entry point to run the full evaluation suite across all 6 metric pillars.
 
 Usage:
     python evaluation/run_eval.py
@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CodeAbstract Evaluation Suite — measures PIR, RF, F1, CSP, and Performance",
+        description="CodeAbstract Evaluation Suite — measures PIR, RF, F1, CSP, Performance, and Mapping Accuracy",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -49,11 +49,21 @@ Examples:
         help="Skip terminal Rich output; only save files",
     )
     parser.add_argument(
+        "--skip-adversary",
+        action="store_true",
+        help="Skip the adversarial re-identification pillar",
+    )
+    parser.add_argument(
         "--skip-performance",
         action="store_true",
         help="Skip performance benchmarks (faster run for quick checks)",
     )
     args = parser.parse_args()
+
+    # Phase 0 / D6: this runner builds its own console, so it must opt into
+    # UTF-8 explicitly or the report-saved lines crash on a cp1252 terminal.
+    from ui.console import ensure_utf8_stdout
+    ensure_utf8_stdout()
 
     privacy_level = args.privacy_level
     output_dir = args.output
@@ -119,6 +129,24 @@ Examples:
             progress.remove_task(task)
             console.print("[green]DONE[/green] Pillar 5 - Performance Benchmarks complete")
 
+        # Pillar 6 — Mapping accuracy (Phase 1)
+        task = progress.add_task("Running Pillar 6: Mapping Accuracy...", total=None)
+        from evaluation.metrics.mapping import run_mapping_suite
+        mapping_result = run_mapping_suite(privacy_level=privacy_level)
+        progress.remove_task(task)
+        console.print("[green]DONE[/green] Pillar 6 - Mapping Accuracy complete")
+
+        # Pillar 7 - Adversarial re-identification (Phase 3)
+        if not args.skip_adversary:
+            task = progress.add_task("Running Pillar 7: Adversarial Re-identification...", total=None)
+            from evaluation.adversary import run_adversary_suite
+            adversary_result = run_adversary_suite()
+            progress.remove_task(task)
+            console.print("[green]DONE[/green] Pillar 7 - Adversarial Re-identification complete")
+        else:
+            adversary_result = None
+            console.print("[dim]SKIP  Pillar 7 - Adversary skipped[/dim]")
+
     total_elapsed = round(time.perf_counter() - total_start, 2)
     console.print(f"\n[dim]Evaluation completed in {total_elapsed}s[/dim]\n")
 
@@ -132,6 +160,8 @@ Examples:
     if not args.no_terminal:
         render_terminal_report(
             privacy=privacy_result,
+            mapping=mapping_result,
+            adversary=adversary_result,
             reconstruction=reconstruction_result,
             classification=classification_result,
             structure=structure_result,
@@ -141,6 +171,8 @@ Examples:
 
     json_path = save_json_report(
         privacy=privacy_result,
+        mapping=mapping_result,
+        adversary=adversary_result,
         reconstruction=reconstruction_result,
         classification=classification_result,
         structure=structure_result,
@@ -151,6 +183,8 @@ Examples:
 
     md_path = save_markdown_report(
         privacy=privacy_result,
+        mapping=mapping_result,
+        adversary=adversary_result,
         reconstruction=reconstruction_result,
         classification=classification_result,
         structure=structure_result,

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CodeAbstract{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('ui.index') }}">
+      <span class="brand-mark">CA</span>
+      <span class="brand-name">CodeAbstract</span>
+    </a>
+    <p class="tagline">Privacy-preserving LLM code consultation</p>
+    <nav class="nav">
+      <a href="{{ url_for('ui.index') }}">Workbench</a>
+      <a href="{{ url_for('ui.sessions_page') }}">Sessions</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <p>
+      Runs locally. Your mapping table never leaves this machine —
+      only the abstracted code is sent to a provider.
+    </p>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

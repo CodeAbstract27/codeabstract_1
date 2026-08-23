@@ -62,6 +62,18 @@ class TestAbstractCommand:
         result = runner.invoke(app, ["abstract", "nonexistent_file.py"])
         assert result.exit_code != 0
 
+    def test_abstract_directory_gives_a_clear_error(self, tmp_path):
+        """
+        A directory `.exists()` too, and has no suffix. Before this was
+        fixed, passing one fell through to language detection and failed
+        there with "No language adapter for ''" -- misleading, since the
+        actual problem (a directory, not a file) was never stated.
+        """
+        result = runner.invoke(app, ["abstract", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "directory" in result.output.lower()
+        assert "language adapter" not in result.output.lower()
+
     def test_abstract_privacy_levels(self):
         """All privacy levels should work."""
         path = self._write_temp_file(SAMPLE_PAYMENT_CODE)
@@ -78,5 +90,20 @@ class TestAbstractCommand:
         try:
             result = runner.invoke(app, ["abstract", path, "-k", "5"])
             assert result.exit_code == 0
+        finally:
+            os.unlink(path)
+
+    def test_abstract_negative_context_window_is_rejected(self):
+        """
+        A negative window flows straight into get_context()'s start/end
+        line arithmetic (which assumes k >= 0) and silently produces an
+        inverted range and an empty context snippet rather than an error --
+        found by direct adversarial testing. The CLI must refuse it rather
+        than accept it and quietly degrade the output.
+        """
+        path = self._write_temp_file(SAMPLE_PAYMENT_CODE)
+        try:
+            result = runner.invoke(app, ["abstract", path, "-k", "-5"])
+            assert result.exit_code != 0
         finally:
             os.unlink(path)

@@ -119,6 +119,30 @@ python cli.py translate <SESSION_ID> "The bug is in FUNC_0."
 python cli.py translate <SESSION_ID> --file response.txt
 ```
 
+#### 🌐 Web Interface
+Serves the workbench on `http://127.0.0.1:5000` — your code and the abstracted code side by side,
+the privacy report inline, and the model's suggestions mapped back onto your own names:
+```powershell
+pip install "flask>=3.0.0"     # or: pip install -e ".[web]"
+python cli.py web
+# Or: codeabstract web --port 8000
+```
+
+The page shows all five outputs the design calls for: the **abstracted code** that is about to be
+sent, the **local vault** (your mapping table, which never leaves the machine), the **raw LLM
+analysis** still in tokens, the **mapped feedback** with your names restored, and the **privacy
+report**. Clicking any token scrolls the original pane to the line it came from.
+
+Three things the web interface does that the CLI does not need to:
+
+* **Secret values are masked everywhere on the page**, including inside the reconstructed feedback
+  and its source-context blocks. A terminal is your own screen; a browser tab is history, extensions
+  and whatever you are screen-sharing. `--allow-reveal` turns the masking off if you want it off.
+* **No file is ever read from the server.** The filename you type only picks the language adapter —
+  the code that gets abstracted is the code in the editor.
+* **It refuses to bind anywhere but loopback** without `--expose`, because nothing in it
+  authenticates a caller and the vault is on the other side of the port.
+
 #### 📊 Session & Statistics Management
 View saved local sessions and global usage statistics:
 ```powershell
@@ -136,12 +160,20 @@ When running the `abstract` command (or using the interactive wizard), you can s
 
 | Level | Description | Behavior |
 |-------|-------------|----------|
-| `low` | Secrets Only | Abstract only `SECRET` patterns (API keys, passwords, auth tokens). |
+| `low` | Secrets Only | Abstract only `SECRET` patterns (API keys, passwords, auth tokens). Endpoints and rates survive — they are business VALUEs, not credentials. |
 | `medium` | Recommended | Abstracts `SECRET` and business `VALUE` patterns (rates, fees, endpoints). |
 | `high` | Strict | Abstracts all multi-character identifiers, secrets, and values. |
 | `critical` | Maximum | Abstracts absolutely everything, including single-character loop variables. |
 
 Use it manually via: `codeabstract abstract file.py --privacy high`
+
+### Comments
+
+Comments are **stripped by default, in every language**. A comment is prose written by the people who
+own the code, and it is where business context lives most densely — `# 2.5% Stripe commission,
+renegotiated Q3` gives away more than the identifier above it. `--keep-comments` re-injects them, and
+even then each one is screened: comments that trip the secret or business-value classifier are
+dropped, and identifiers named inside the survivors are rewritten to their tokens.
 
 ---
 
@@ -149,20 +181,36 @@ Use it manually via: `codeabstract abstract file.py --privacy high`
 
 CodeAbstract ships with a comprehensive test suite covering the core algorithms, encryption, CLI commands, and end-to-end workflows. 
 
-Run the tests using `pytest`:
+**650 tests pass.** Run them with `pytest`:
 
 ```powershell
 # Run the full test suite
 pytest tests/ -v
 
+# Just the web interface (201 tests)
+pytest tests/test_web/ -v
+
 # Run tests with a coverage report
-pytest tests/ --cov=codeabstract --cov-report=term-missing
+pytest tests/ --cov --cov-report=term-missing
 ```
+
+The suite is organised by the phase that introduced each guarantee, so a failure names what broke:
+
+| Directory | Covers |
+|---|---|
+| `tests/test_algorithms/test_phase0_regressions.py` | Every credential leak path, at all four privacy levels |
+| `tests/test_algorithms/test_phase1_mapping.py` | Scope-aware mapping, occurrence records, line translation |
+| `tests/test_algorithms/test_phase2_detection.py` | Context-based detection a name-regex cannot catch |
+| `tests/test_algorithms/test_phase3_adversary.py` | The linkage attack and Code Privacy Entropy |
+| `tests/test_algorithms/test_phase4_platform.py` | Providers, audit log, key storage, JavaScript |
+| `tests/test_algorithms/test_leak_regressions.py` | Six leak paths the phase suites missed — see the file's header table |
+| `tests/test_web/` | The web interface — see `test_web_privacy.py` for the guarantee itself |
 
 ---
 
 ## 🛠️ Technology Stack
 - **CLI Framework:** `typer` & `questionary`
+- **Web Interface:** `flask` (optional — `pip install -e ".[web]"`)
 - **Terminal UI:** `rich` & `pygments`
 - **Parsing:** Python standard `ast` library
 - **Security:** `cryptography` (Fernet)

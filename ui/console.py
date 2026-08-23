@@ -31,14 +31,32 @@ CODEABSTRACT_THEME = Theme({
     "identifier": "bold white",
 })
 
-# Force UTF-8 output on Windows to avoid charmap encoding errors
-if sys.platform == "win32":
+def ensure_utf8_stdout() -> None:
+    """
+    Force UTF-8 output on Windows to avoid charmap encoding errors.
+
+    Phase 0 / D6: the evaluation runner builds its own Rich console and so
+    never imported this module, which is why writing the final "✓ report
+    saved" lines crashed with ``UnicodeEncodeError`` on a cp1252 console —
+    after the reports had already been written, making the failure look
+    worse than it was.  Any entry point that prints non-ASCII should call
+    this first.
+
+    Safe to call repeatedly and on non-Windows platforms, where it is a
+    no-op.
+    """
+    if sys.platform != "win32":
+        return
+
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, OSError):
-        pass
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            pass
+
+
+ensure_utf8_stdout()
 
 # Shared console singleton — force_terminal=True enables ANSI on Windows
 console = Console(theme=CODEABSTRACT_THEME, force_terminal=True, safe_box=True)

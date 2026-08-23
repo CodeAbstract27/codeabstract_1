@@ -110,13 +110,26 @@ def print_session_table(sessions: List[Dict]) -> None:
     console.print(table)
 
 
-def print_abstract_code(code: str, theme: str = "monokai") -> None:
-    """Display abstract code with syntax highlighting."""
+def print_abstract_code(
+    code: str,
+    theme: str = "monokai",
+    language: str = "python",
+) -> None:
+    """
+    Display abstract code with syntax highlighting.
+
+    Args:
+        code: The abstract code.
+        theme: Pygments theme name.
+        language: Lexer to highlight with (Phase 4 — the tool is no longer
+            Python-only, and highlighting JavaScript as Python makes the
+            preview harder to read than no highlighting at all).
+    """
     console = get_console()
 
     syntax = Syntax(
         code,
-        "python",
+        language,
         theme=theme,
         line_numbers=True,
         word_wrap=True,
@@ -145,3 +158,131 @@ def print_next_steps(session_id: str) -> None:
     console.print(
         f"  4. Run: [accent]codeabstract translate {short_id}[/accent]\n"
     )
+
+
+# ═══════════════════════════════════════════════════════════
+# Phase 4 — privacy report
+# ═══════════════════════════════════════════════════════════
+
+def print_privacy_report(report, detail: bool = False, max_rows: int = 20) -> None:
+    """
+    Display a :class:`core.privacy_report.PrivacyReport`.
+
+    Kept names come first and uncertain decisions second, because those are
+    the two lists a user can act on: one is the exposure they are about to
+    accept, the other is where the detector is guessing. The hidden count —
+    the number the tool used to lead with — is a summary line at the end.
+
+    Args:
+        report: The report to display.
+        detail: Show every hidden symbol as well as the summary.
+        max_rows: Rows per table before truncating. Truncation is stated
+            explicitly; a silently shortened privacy report would be worse
+            than none.
+    """
+    console = get_console()
+
+    console.print(Panel(
+        f"[info]File:[/info] {report.source_file or '—'}\n"
+        f"[info]Level:[/info] {report.privacy_level}   "
+        f"[info]Language:[/info] {report.language}   "
+        f"[info]Detector:[/info] {report.detector_version}\n"
+        f"[muted]{report.headline()}[/muted]",
+        title="[header]Privacy Report[/header]",
+        border_style="#d77757",
+        box=ROUNDED,
+        expand=False,
+    ))
+
+    # ── What is still readable in the outbound payload ──
+    if report.kept:
+        table = Table(
+            title="Kept readable — sent to the provider as-is",
+            show_header=True, header_style="bold #d77757",
+            border_style="dim", box=MINIMAL,
+        )
+        table.add_column("Name", style="identifier")
+        table.add_column("Why", style="muted")
+        table.add_column("Line", justify="right")
+        table.add_column("Uses", justify="right")
+
+        for item in report.kept[:max_rows]:
+            table.add_row(
+                item.name if len(item.name) <= 48 else item.name[:45] + "…",
+                item.reason,
+                str(item.lineno),
+                str(item.occurrences),
+            )
+        console.print(table)
+        if len(report.kept) > max_rows:
+            console.print(
+                f"[muted]  … and {len(report.kept) - max_rows} more "
+                f"(use --privacy-report-json for the full list)[/muted]"
+            )
+    else:
+        console.print("[success]✓ Nothing kept readable at this level.[/success]")
+
+    # ── Where the detector was unsure ──
+    if report.uncertain:
+        table = Table(
+            title="Unsure — below the review threshold",
+            show_header=True, header_style="bold #ffb74d",
+            border_style="dim", box=MINIMAL,
+        )
+        table.add_column("Token", style="accent")
+        table.add_column("Name", style="identifier")
+        table.add_column("Label")
+        table.add_column("Conf.", justify="right")
+        table.add_column("Detector", style="muted")
+
+        for item in report.uncertain[:max_rows]:
+            table.add_row(
+                item.token, item.name, item.label,
+                f"{item.confidence:.2f}", item.detector,
+            )
+        console.print(table)
+        if len(report.uncertain) > max_rows:
+            console.print(
+                f"[muted]  … and {len(report.uncertain) - max_rows} more[/muted]"
+            )
+
+    # ── What was hidden ──
+    summary = Table(
+        title="Hidden", show_header=True, header_style="bold green",
+        border_style="dim", box=MINIMAL,
+    )
+    summary.add_column("Label")
+    summary.add_column("Count", justify="right")
+    summary.add_column("Detector", style="muted")
+    summary.add_column("Count", justify="right")
+
+    labels = sorted(report.hidden_by_label.items())
+    detectors = sorted(report.hidden_by_detector.items(), key=lambda kv: -kv[1])
+    for index in range(max(len(labels), len(detectors))):
+        label_cell, label_count = labels[index] if index < len(labels) else ("", "")
+        det_cell, det_count = detectors[index] if index < len(detectors) else ("", "")
+        summary.add_row(label_cell, str(label_count), det_cell, str(det_count))
+    console.print(summary)
+
+    if detail and report.hidden:
+        table = Table(
+            title="Hidden — every symbol", show_header=True,
+            header_style="bold green", border_style="dim", box=MINIMAL,
+        )
+        table.add_column("Token", style="accent")
+        table.add_column("Name", style="identifier")
+        table.add_column("Label")
+        table.add_column("Line", justify="right")
+        table.add_column("Uses", justify="right")
+        for item in report.hidden[:max_rows * 3]:
+            table.add_row(
+                item.token, item.name, item.label,
+                str(item.lineno), str(item.occurrences),
+            )
+        console.print(table)
+
+    if report.secrets_masked:
+        console.print(
+            "[muted]Secret values are masked. Pass --reveal to show them "
+            "in the terminal.[/muted]"
+        )

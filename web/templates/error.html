@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ status }} — CodeAbstract{% endblock %}
+
+{% block content %}
+<section class="panel error-panel">
+  <h2>{{ status }}</h2>
+  <p>{{ message }}</p>
+  <p><a href="{{ url_for('ui.index') }}">Back to the workbench</a></p>
+</section>
+{% endblock %}

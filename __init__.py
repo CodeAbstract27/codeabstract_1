@@ -6,5 +6,6 @@ Python code into privacy-safe intermediate representation, enabling developers
 to safely consult LLMs without exposing intellectual property.
 """
 
-__version__ = "1.0.0"
+from config.settings import __version__  # noqa: F401  (single source of truth)
+
 __author__ = "CodeAbstract Team"

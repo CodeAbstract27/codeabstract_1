@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Workbench — CodeAbstract{% endblock %}
+
+{% block content %}
+<div class="workbench">
+
+  {# ── Input ────────────────────────────────────────── #}
+  <section class="panel input-panel">
+    <div class="panel-head">
+      <h2>Source</h2>
+      <div class="head-actions">
+        <label class="file-button" for="file-input">Open file…</label>
+        <input type="file" id="file-input" class="hidden-input"
+               accept=".py,.pyi,.js,.jsx,.mjs,.cjs,.ts,.tsx">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <label class="field">
+        <span>Filename</span>
+        <input type="text" id="filename" value="{{ sample_filename }}"
+               spellcheck="false" autocomplete="off">
+      </label>
+      <p class="field-note">
+        Used only to pick the language adapter — no file is read from the server.
+      </p>
+    </div>
+
+    <textarea id="source" class="code-input" spellcheck="false"
+              aria-label="Source code">{{ sample_code }}</textarea>
+
+    <div class="controls">
+      <label class="field">
+        <span>Privacy level</span>
+        <select id="privacy-level">
+          {% for level in privacy_levels %}
+            <option value="{{ level.level }}"
+              {% if level.level == 'high' %}selected{% endif %}>
+              {{ level.level }} — {{ level.description }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label class="field narrow">
+        <span>Context k</span>
+        <input type="number" id="context-window" value="3"
+               min="0" max="{{ max_context_window }}">
+      </label>
+
+      <label class="field checkbox">
+        <input type="checkbox" id="keep-comments">
+        <span>Keep screened comments</span>
+      </label>
+
+      {% if allow_reveal %}
+      <label class="field checkbox danger">
+        <input type="checkbox" id="reveal">
+        <span>Reveal secret values</span>
+      </label>
+      {% endif %}
+    </div>
+
+    <div class="controls">
+      <label class="field">
+        <span>Task</span>
+        <select id="task">
+          {% for task in tasks %}
+            <option value="{{ task }}"
+              {% if task == 'review' %}selected{% endif %}>{{ task }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Provider</span>
+        <select id="provider">
+          <option value="">auto</option>
+          {% for provider in providers %}
+            <option value="{{ provider.provider }}"
+              {% if not provider.ready %}disabled{% endif %}>
+              {{ provider.provider }}{% if not provider.ready %} — {{ provider.hint }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <label class="field">
+      <span>Your question <em>(optional — abstracted with the same mapping)</em></span>
+      <input type="text" id="query" spellcheck="false" autocomplete="off"
+             placeholder="Why does the commission come out wrong for small amounts?">
+    </label>
+
+    <div class="actions">
+      <button type="button" id="btn-abstract" class="primary">Abstract</button>
+      <button type="button" id="btn-review">Abstract → LLM → Reconstruct</button>
+      <span class="limit-note">Limit {{ max_source_kib }} KiB</span>
+    </div>
+
+    <p id="status" class="status" role="status"></p>
+  </section>
+
+  {# ── Run summary (proposal Option B header) ────────── #}
+  <section class="panel summary-panel" id="summary" hidden>
+    <ul class="checklist" id="checklist"></ul>
+    <dl class="stat-strip" id="stat-strip"></dl>
+  </section>
+
+  {# ── Side-by-side code ────────────────────────────── #}
+  <section class="panel code-panel" id="code-panel" hidden>
+    <div class="panel-head">
+      <h2>Original vs. abstracted</h2>
+      <p class="legend">
+        <span class="chip tok-secret">secret</span>
+        <span class="chip tok-value">business value</span>
+        <span class="chip tok-identifier">identifier</span>
+      </p>
+    </div>
+    <div class="side-by-side">
+      <div class="pane">
+        <h3>Your code <span class="pane-note">stays on this machine</span></h3>
+        <div class="code-view" id="pane-original"></div>
+      </div>
+      <div class="pane">
+        <h3>Abstracted <span class="pane-note">this is what is sent</span></h3>
+        <div class="code-view" id="pane-abstract"></div>
+      </div>
+    </div>
+  </section>
+
+  {# ── The remaining output formats ──────────────────── #}
+  <section class="panel output-panel" id="output-panel" hidden>
+    <div class="tabs" id="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="report" role="tab">
+        Privacy report
+      </button>
+      <button type="button" class="tab" data-tab="vault" role="tab">
+        Local vault
+      </button>
+      <button type="button" class="tab" data-tab="raw" role="tab">
+        LLM analysis
+      </button>
+      <button type="button" class="tab" data-tab="mapped" role="tab">
+        Mapped feedback
+      </button>
+    </div>
+
+    <div class="tab-body" id="tab-report" role="tabpanel">
+      <div id="report-summary"></div>
+      <div class="table-scroll"><table id="report-table"></table></div>
+      <button type="button" id="btn-report-md" class="link-button">
+        Download report as Markdown
+      </button>
+    </div>
+
+    <div class="tab-body" id="tab-vault" role="tabpanel" hidden>
+      <p class="vault-warning">
+        The mapping table. This is what the abstraction holds back — it is
+        stored encrypted on this machine and is never part of a request.
+      </p>
+      <div class="table-scroll"><table id="vault-table"></table></div>
+    </div>
+
+    <div class="tab-body" id="tab-raw" role="tabpanel" hidden>
+      <p class="pane-note">
+        The provider's answer, exactly as it came back — still in tokens.
+      </p>
+      <pre class="response-view" id="raw-response"></pre>
+    </div>
+
+    <div class="tab-body" id="tab-mapped" role="tabpanel" hidden>
+      <p class="pane-note">
+        The same answer with your names and line numbers restored.
+      </p>
+      <pre class="response-view" id="mapped-feedback"></pre>
+    </div>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}

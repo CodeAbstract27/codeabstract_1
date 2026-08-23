@@ -26,6 +26,14 @@ SECRET_PATTERNS = [
     r'.*bearer.*',
     r'.*private.*',
     r'.*passwd.*',
+    # Phase 0 / D1: 'db_pass', 'pass', 'user_pwd' were all missed because
+    # only the full words 'password'/'passwd' were listed.  Word-boundary
+    # anchored so 'bypass', 'compass' and 'passenger' still classify as
+    # ordinary identifiers.
+    r'(^|_)pass(_|$)',
+    r'(^|_)pwd(_|$)',
+    r'(^|_)pw(_|$)',
+    r'.*passphrase.*',
 ]
 
 # ═══════════════════════════════════════════════════════════

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from algorithms.abstract import abstract
 from algorithms.reconstruct import reconstruct
+from config.ignore_rules import load_rules
 from storage.session_manager import save_session, list_sessions
 from utils.file_io import read_file
 from utils.clipboard import copy_to_clipboard
@@ -63,7 +64,10 @@ def run_interactive():
 
     with console.status("[bold green]Running ABSTRACT(S, k)…"):
         try:
-            result = abstract(source_code, ctx_window, privacy)
+            result = abstract(
+                source_code, ctx_window, privacy,
+                overrides=load_rules(p),
+            )
         except ValueError as e:
             console.print(f"[error]✗ {e}[/error]")
             raise typer.Exit(1)
@@ -76,6 +80,7 @@ def run_interactive():
         encrypted_mapping=result.encrypted_mapping,
         encryption_key=result.encryption_key,
         statistics=result.statistics,
+        line_map=result.line_map,
     )
 
     console.print("[success]✓ Abstraction complete![/success]\n")
@@ -113,6 +118,7 @@ def run_interactive():
     with console.status("[bold green]Running RECONSTRUCT(R, M̃, K)…"):
         translated = reconstruct(
             llm_response, result.encrypted_mapping, result.encryption_key,
+            line_map=result.line_map,
         )
 
     console.print("\n[success]✓ Translation complete![/success]\n")

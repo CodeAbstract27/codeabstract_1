@@ -1,6 +1,6 @@
 {
   "meta": {
-    "timestamp": "2026-08-07T23:38:04.375026",
+    "timestamp": "2026-08-19T14:24:07.488390",
     "privacy_level": "high",
     "files_evaluated": 10
   },
@@ -8,7 +8,7 @@
     "mean_pir": 0.0024,
     "mean_secret_leakage_rate": 0.0,
     "mean_value_leakage_rate": 0.0024,
-    "mean_identifier_leakage_rate": 0.0245,
+    "mean_identifier_leakage_rate": 0.0279,
     "syntax_validity_rate": 1.0,
     "per_file": [
       {
@@ -16,10 +16,10 @@
         "overall_pir": 0.0,
         "secret_leakage_rate": 0.0,
         "value_leakage_rate": 0.0,
-        "secret_total": 10,
-        "secret_abstracted": 10,
-        "value_total": 16,
-        "value_abstracted": 16
+        "secret_total": 17,
+        "secret_abstracted": 17,
+        "value_total": 21,
+        "value_abstracted": 21
       },
       {
         "file": "ecommerce_pricing",
@@ -36,20 +36,20 @@
         "overall_pir": 0.0,
         "secret_leakage_rate": 0.0,
         "value_leakage_rate": 0.0,
-        "secret_total": 5,
-        "secret_abstracted": 5,
-        "value_total": 21,
-        "value_abstracted": 21
+        "secret_total": 6,
+        "secret_abstracted": 6,
+        "value_total": 23,
+        "value_abstracted": 23
       },
       {
         "file": "web_server_config",
         "overall_pir": 0.0,
         "secret_leakage_rate": 0.0,
         "value_leakage_rate": 0.0,
-        "secret_total": 11,
-        "secret_abstracted": 11,
-        "value_total": 16,
-        "value_abstracted": 16
+        "secret_total": 17,
+        "secret_abstracted": 17,
+        "value_total": 19,
+        "value_abstracted": 19
       },
       {
         "file": "simple_utility",
@@ -66,8 +66,8 @@
         "overall_pir": 0.0,
         "secret_leakage_rate": 0.0,
         "value_leakage_rate": 0.0,
-        "secret_total": 25,
-        "secret_abstracted": 25,
+        "secret_total": 31,
+        "secret_abstracted": 31,
         "value_total": 9,
         "value_abstracted": 9
       },
@@ -86,108 +86,108 @@
         "overall_pir": 0.0,
         "secret_leakage_rate": 0.0,
         "value_leakage_rate": 0.0,
-        "secret_total": 6,
-        "secret_abstracted": 6,
-        "value_total": 9,
-        "value_abstracted": 9
+        "secret_total": 10,
+        "secret_abstracted": 10,
+        "value_total": 10,
+        "value_abstracted": 10
       },
       {
         "file": "microservice_router",
         "overall_pir": 0.0,
         "secret_leakage_rate": 0.0,
         "value_leakage_rate": 0.0,
-        "secret_total": 3,
-        "secret_abstracted": 3,
-        "value_total": 28,
-        "value_abstracted": 28
+        "secret_total": 4,
+        "secret_abstracted": 4,
+        "value_total": 30,
+        "value_abstracted": 30
       },
       {
         "file": "analytics_engine",
         "overall_pir": 0.0,
         "secret_leakage_rate": 0.0,
         "value_leakage_rate": 0.0,
-        "secret_total": 5,
-        "secret_abstracted": 5,
-        "value_total": 37,
-        "value_abstracted": 37
+        "secret_total": 6,
+        "secret_abstracted": 6,
+        "value_total": 39,
+        "value_abstracted": 39
       }
     ]
   },
   "pillar_2_reconstruction": {
     "mean_token_hit_rate": 1.0,
     "mean_replacement_accuracy": 1.0,
-    "mean_roundtrip_fidelity": 0.2516,
+    "mean_roundtrip_fidelity": 0.3022,
     "context_block_rate": 1.0,
-    "mean_reconstruction_rate": 0.4848,
+    "mean_reconstruction_rate": 0.5625,
     "per_file": [
       {
         "file": "api_client",
-        "tokens_generated": 47,
+        "tokens_generated": 52,
         "token_hit_rate": 1.0,
-        "roundtrip_fidelity": 0.2491,
+        "roundtrip_fidelity": 0.2761,
         "has_context_blocks": true
       },
       {
         "file": "ecommerce_pricing",
-        "tokens_generated": 47,
+        "tokens_generated": 49,
         "token_hit_rate": 1.0,
-        "roundtrip_fidelity": 0.2337,
+        "roundtrip_fidelity": 0.2472,
         "has_context_blocks": true
       },
       {
         "file": "ml_pipeline",
-        "tokens_generated": 64,
+        "tokens_generated": 68,
         "token_hit_rate": 1.0,
-        "roundtrip_fidelity": 0.2873,
+        "roundtrip_fidelity": 0.3016,
         "has_context_blocks": true
       },
       {
         "file": "web_server_config",
-        "tokens_generated": 41,
+        "tokens_generated": 45,
         "token_hit_rate": 1.0,
-        "roundtrip_fidelity": 0.3605,
+        "roundtrip_fidelity": 0.3758,
         "has_context_blocks": true
       },
       {
         "file": "simple_utility",
-        "tokens_generated": 44,
+        "tokens_generated": 46,
         "token_hit_rate": 1.0,
-        "roundtrip_fidelity": 0.0331,
+        "roundtrip_fidelity": 0.2655,
         "has_context_blocks": true
       },
       {
         "file": "auth_service",
-        "tokens_generated": 57,
+        "tokens_generated": 58,
         "token_hit_rate": 1.0,
-        "roundtrip_fidelity": 0.2045,
+        "roundtrip_fidelity": 0.3155,
         "has_context_blocks": true
       },
       {
         "file": "financial_calculator",
         "tokens_generated": 46,
         "token_hit_rate": 1.0,
-        "roundtrip_fidelity": 0.2061,
+        "roundtrip_fidelity": 0.308,
         "has_context_blocks": true
       },
       {
         "file": "database_layer",
-        "tokens_generated": 48,
+        "tokens_generated": 58,
         "token_hit_rate": 1.0,
-        "roundtrip_fidelity": 0.332,
+        "roundtrip_fidelity": 0.3214,
         "has_context_blocks": true
       },
       {
         "file": "microservice_router",
-        "tokens_generated": 47,
+        "tokens_generated": 49,
         "token_hit_rate": 1.0,
-        "roundtrip_fidelity": 0.3502,
+        "roundtrip_fidelity": 0.3651,
         "has_context_blocks": true
       },
       {
         "file": "analytics_engine",
-        "tokens_generated": 52,
+        "tokens_generated": 55,
         "token_hit_rate": 1.0,
-        "roundtrip_fidelity": 0.2597,
+        "roundtrip_fidelity": 0.2459,
         "has_context_blocks": true
       }
     ]
@@ -264,14 +264,14 @@
     "mean_ast_isomorphism": 1.0,
     "mean_complexity_delta": 0.0,
     "mean_token_ratio": 0.9967,
-    "mean_abstraction_density": 1.1064,
+    "mean_abstraction_density": 1.1071,
     "per_file": [
       {
         "file": "api_client",
         "syntax_valid": true,
         "ast_isomorphism_score": 1.0,
         "cyclomatic_complexity_delta": 0,
-        "abstraction_density": 1.0488
+        "abstraction_density": 0.9878
       },
       {
         "file": "ecommerce_pricing",
@@ -285,14 +285,14 @@
         "syntax_valid": true,
         "ast_isomorphism_score": 1.0,
         "cyclomatic_complexity_delta": 0,
-        "abstraction_density": 1.1573
+        "abstraction_density": 1.1348
       },
       {
         "file": "web_server_config",
         "syntax_valid": true,
         "ast_isomorphism_score": 1.0,
         "cyclomatic_complexity_delta": 0,
-        "abstraction_density": 1.0182
+        "abstraction_density": 1.0909
       },
       {
         "file": "simple_utility",
@@ -306,7 +306,7 @@
         "syntax_valid": true,
         "ast_isomorphism_score": 1.0,
         "cyclomatic_complexity_delta": 0,
-        "abstraction_density": 1.0682
+        "abstraction_density": 1.0227
       },
       {
         "file": "financial_calculator",
@@ -320,7 +320,7 @@
         "syntax_valid": true,
         "ast_isomorphism_score": 1.0,
         "cyclomatic_complexity_delta": 0,
-        "abstraction_density": 0.9747
+        "abstraction_density": 1.038
       },
       {
         "file": "microservice_router",
@@ -338,14 +338,201 @@
       }
     ]
   },
+  "pillar_6_mapping": {
+    "mean_mapping_accuracy": 0.9975,
+    "mean_definition_accuracy": 0.9946,
+    "mean_occurrence_accuracy": 0.9955,
+    "mean_shadow_resolution": 1.0,
+    "mean_line_map_accuracy": 1.0,
+    "total_shadowed_names": 12,
+    "per_file": [
+      {
+        "file_name": "api_client",
+        "definition_accuracy": 0.9722,
+        "occurrence_accuracy": 0.9844,
+        "shadow_resolution": 1.0,
+        "line_map_accuracy": 1.0,
+        "mapping_accuracy": 0.9891
+      },
+      {
+        "file_name": "ecommerce_pricing",
+        "definition_accuracy": 1.0,
+        "occurrence_accuracy": 1.0,
+        "shadow_resolution": 1.0,
+        "line_map_accuracy": 1.0,
+        "mapping_accuracy": 1.0
+      },
+      {
+        "file_name": "ml_pipeline",
+        "definition_accuracy": 1.0,
+        "occurrence_accuracy": 1.0,
+        "shadow_resolution": 1.0,
+        "line_map_accuracy": 1.0,
+        "mapping_accuracy": 1.0
+      },
+      {
+        "file_name": "web_server_config",
+        "definition_accuracy": 1.0,
+        "occurrence_accuracy": 1.0,
+        "shadow_resolution": 1.0,
+        "line_map_accuracy": 1.0,
+        "mapping_accuracy": 1.0
+      },
+      {
+        "file_name": "simple_utility",
+        "definition_accuracy": 1.0,
+        "occurrence_accuracy": 1.0,
+        "shadow_resolution": 1.0,
+        "line_map_accuracy": 1.0,
+        "mapping_accuracy": 1.0
+      },
+      {
+        "file_name": "auth_service",
+        "definition_accuracy": 0.9737,
+        "occurrence_accuracy": 0.971,
+        "shadow_resolution": 1.0,
+        "line_map_accuracy": 1.0,
+        "mapping_accuracy": 0.9862
+      },
+      {
+        "file_name": "financial_calculator",
+        "definition_accuracy": 1.0,
+        "occurrence_accuracy": 1.0,
+        "shadow_resolution": 1.0,
+        "line_map_accuracy": 1.0,
+        "mapping_accuracy": 1.0
+      },
+      {
+        "file_name": "database_layer",
+        "definition_accuracy": 1.0,
+        "occurrence_accuracy": 1.0,
+        "shadow_resolution": 1.0,
+        "line_map_accuracy": 1.0,
+        "mapping_accuracy": 1.0
+      },
+      {
+        "file_name": "microservice_router",
+        "definition_accuracy": 1.0,
+        "occurrence_accuracy": 1.0,
+        "shadow_resolution": 1.0,
+        "line_map_accuracy": 1.0,
+        "mapping_accuracy": 1.0
+      },
+      {
+        "file_name": "analytics_engine",
+        "definition_accuracy": 1.0,
+        "occurrence_accuracy": 1.0,
+        "shadow_resolution": 1.0,
+        "line_map_accuracy": 1.0,
+        "mapping_accuracy": 1.0
+      }
+    ]
+  },
   "pillar_5_performance": {
-    "mean_abstraction_time_ms": 0.0,
-    "mean_reconstruction_time_ms": 0.0,
-    "mean_encryption_time_ms": 0.0,
-    "mean_pipeline_time_ms": 0.0,
-    "mean_throughput_loc_per_sec": 0.0,
-    "peak_throughput_loc_per_sec": 0.0,
-    "scaling_curve": [],
-    "per_file": []
+    "mean_abstraction_time_ms": 7.35,
+    "mean_reconstruction_time_ms": 0.759,
+    "mean_encryption_time_ms": 0.872,
+    "mean_pipeline_time_ms": 8.982,
+    "mean_throughput_loc_per_sec": 5336.5,
+    "peak_throughput_loc_per_sec": 6070.2,
+    "scaling_curve": [
+      {
+        "loc": 39,
+        "abstraction_time_ms": 8.509,
+        "throughput_loc_per_sec": 4583.4
+      },
+      {
+        "loc": 78,
+        "abstraction_time_ms": 14.669,
+        "throughput_loc_per_sec": 5317.3
+      },
+      {
+        "loc": 117,
+        "abstraction_time_ms": 22.869,
+        "throughput_loc_per_sec": 5116.1
+      },
+      {
+        "loc": 195,
+        "abstraction_time_ms": 36.225,
+        "throughput_loc_per_sec": 5383.0
+      },
+      {
+        "loc": 312,
+        "abstraction_time_ms": 62.253,
+        "throughput_loc_per_sec": 5011.8
+      }
+    ],
+    "per_file": [
+      {
+        "file": "api_client",
+        "loc": 42,
+        "abstraction_time_ms": 6.919,
+        "reconstruction_time_ms": 0.808,
+        "throughput_loc_per_sec": 6070.2
+      },
+      {
+        "file": "ecommerce_pricing",
+        "loc": 39,
+        "abstraction_time_ms": 7.568,
+        "reconstruction_time_ms": 0.661,
+        "throughput_loc_per_sec": 5153.3
+      },
+      {
+        "file": "ml_pipeline",
+        "loc": 48,
+        "abstraction_time_ms": 9.338,
+        "reconstruction_time_ms": 0.978,
+        "throughput_loc_per_sec": 5140.3
+      },
+      {
+        "file": "web_server_config",
+        "loc": 31,
+        "abstraction_time_ms": 5.162,
+        "reconstruction_time_ms": 0.579,
+        "throughput_loc_per_sec": 6005.4
+      },
+      {
+        "file": "simple_utility",
+        "loc": 41,
+        "abstraction_time_ms": 7.956,
+        "reconstruction_time_ms": 0.63,
+        "throughput_loc_per_sec": 5153.3
+      },
+      {
+        "file": "auth_service",
+        "loc": 42,
+        "abstraction_time_ms": 7.334,
+        "reconstruction_time_ms": 0.8,
+        "throughput_loc_per_sec": 5726.8
+      },
+      {
+        "file": "financial_calculator",
+        "loc": 33,
+        "abstraction_time_ms": 6.777,
+        "reconstruction_time_ms": 0.67,
+        "throughput_loc_per_sec": 4869.4
+      },
+      {
+        "file": "database_layer",
+        "loc": 41,
+        "abstraction_time_ms": 7.699,
+        "reconstruction_time_ms": 0.843,
+        "throughput_loc_per_sec": 5325.4
+      },
+      {
+        "file": "microservice_router",
+        "loc": 36,
+        "abstraction_time_ms": 6.957,
+        "reconstruction_time_ms": 0.72,
+        "throughput_loc_per_sec": 5174.6
+      },
+      {
+        "file": "analytics_engine",
+        "loc": 37,
+        "abstraction_time_ms": 7.795,
+        "reconstruction_time_ms": 0.906,
+        "throughput_loc_per_sec": 4746.6
+      }
+    ]
   }
 }

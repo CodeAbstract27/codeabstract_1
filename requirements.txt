@@ -9,6 +9,9 @@ questionary>=2.0.1
 pytest>=8.1.1
 pytest-cov>=5.0.0
 
+# Web interface (optional -- `codeabstract web`)
+# flask>=3.0.0
+
 # LLM Providers (install only what you need)
 # openai>=1.0.0              # For OpenAI GPT
 # anthropic>=0.20.0          # For Anthropic Claude

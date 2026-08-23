@@ -1,59 +1,73 @@
 """
 Google Gemini LLM Client
 
-Integrates with Google Gemini models.
+Phase 4: refactored onto :class:`llm.base.BaseLLMClient`. Prompt assembly,
+retries, timing and token accounting moved to the base class; what remains
+here is the one call that is actually Gemini-specific.
+
+The SDK is imported lazily so that ``import llm`` works with only one
+vendor package installed — the common case, since a user configures the
+provider they have a key for.
 """
 
-import time
-import google.generativeai as genai
-from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
-@dataclass
-class LLMResponse:
-    content: str
-    response_time: float
-    success: bool
-    error: Optional[str] = None
+from llm.base import (
+    DEFAULT_TIMEOUT,
+    SYSTEM_PROMPT,
+    BaseLLMClient,
+    RetryPolicy,
+    TokenUsage,
+)
 
-SYSTEM_PROMPT = """You are an expert code reviewer. 
-The code uses abstract identifiers (FUNC_0, VAR_1, CLASS_0) 
-for privacy. Use these exact names in your response.
-Reference specific line numbers when pointing out issues."""
+# Re-exported for callers that imported them from this module before
+# Phase 4 moved them to llm.base.
+from llm.base import TASK_PROMPTS, LLMResponse  # noqa: F401
 
-TASK_PROMPTS = {
-    'debug': "Find bugs and errors in this code:\n\n```python\n{code}\n```",
-    'review': "Review this code for quality and issues:\n\n```python\n{code}\n```",
-    'optimize': "Suggest optimizations for this code:\n\n```python\n{code}\n```",
-    'security': "Find security issues in this code:\n\n```python\n{code}\n```",
-    'explain': "Explain what this code does:\n\n```python\n{code}\n```",
-}
 
-class GeminiClient:
-    
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(
-            model_name=model,
-            system_instruction=SYSTEM_PROMPT
-        )
-    
-    def send(self, abstract_code: str, task: str = "review") -> LLMResponse:
-        start = time.time()
+class GeminiClient(BaseLLMClient):
+    """Google Gemini via ``google-generativeai``."""
+
+    provider = "gemini"
+    default_model = "gemini-2.5-flash"
+
+    def __init__(
+        self,
+        api_key: str,
+        model: Optional[str] = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        retry: Optional[RetryPolicy] = None,
+    ):
+        super().__init__(api_key=api_key, model=model, timeout=timeout, retry=retry)
+
         try:
-            prompt = TASK_PROMPTS.get(task, TASK_PROMPTS['review'])
-            response = self.model.generate_content(
-                prompt.format(code=abstract_code)
+            import google.generativeai as genai
+        except ImportError as exc:  # pragma: no cover - depends on install
+            raise ImportError(
+                "The Gemini provider needs the 'google-generativeai' package: "
+                "pip install 'codeabstract[gemini]'"
+            ) from exc
+
+        genai.configure(api_key=api_key)
+        self._client = genai.GenerativeModel(
+            model_name=self.model,
+            system_instruction=SYSTEM_PROMPT,
+        )
+
+    def _generate(self, prompt: str) -> Tuple[str, TokenUsage]:
+        response = self._client.generate_content(
+            prompt,
+            request_options={'timeout': self.timeout},
+        )
+
+        meta = getattr(response, 'usage_metadata', None)
+        if meta is None:
+            usage = TokenUsage()
+        else:
+            usage = TokenUsage(
+                prompt_tokens=int(getattr(meta, 'prompt_token_count', 0) or 0),
+                completion_tokens=int(getattr(meta, 'candidates_token_count', 0) or 0),
+                reported=True,
             )
-            return LLMResponse(
-                content=response.text,
-                response_time=time.time() - start,
-                success=True
-            )
-        except Exception as e:
-            return LLMResponse(
-                content="",
-                response_time=time.time() - start,
-                success=False,
-                error=str(e)
-            )
+
+        return response.text, usage

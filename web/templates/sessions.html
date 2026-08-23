@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Sessions — CodeAbstract{% endblock %}
+
+{% block content %}
+<div class="sessions-page">
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Recent sessions</h2>
+      <p class="pane-note">
+        Each row is one abstraction. The mapping is encrypted at rest and
+        its key lives outside the database.
+      </p>
+    </div>
+
+    {% if sessions %}
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Source</th>
+            <th>Language</th>
+            <th>Created</th>
+            <th class="num">Abstracted</th>
+            <th class="num">Secrets</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="session-rows">
+          {% for session in sessions %}
+          <tr data-session="{{ session.session_id }}">
+            <td><code>{{ session.short_id }}</code></td>
+            <td>{{ session.source_file }}</td>
+            <td>{{ session.language }}</td>
+            <td>{{ session.created_at }}</td>
+            <td class="num">{{ session.statistics.get('abstracted_nodes', 0) }}</td>
+            <td class="num">{{ session.statistics.get('secrets_found', 0) }}</td>
+            <td>
+              <button type="button" class="link-button use-session"
+                      data-session="{{ session.session_id }}">use</button>
+              <button type="button" class="link-button danger delete-session"
+                      data-session="{{ session.session_id }}">delete</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty">
+      No sessions yet. Abstract something on the
+      <a href="{{ url_for('ui.index') }}">workbench</a> and it will appear here.
+    </p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Translate a response</h2>
+      <p class="pane-note">
+        Paste what the model gave you back. Tokens resolve to your names,
+        and its line citations are rewritten to your file's numbering.
+      </p>
+    </div>
+
+    <label class="field">
+      <span>Session ID (full or prefix)</span>
+      <input type="text" id="translate-session" spellcheck="false"
+             autocomplete="off" placeholder="a1b2c3d4">
+    </label>
+
+    <textarea id="translate-text" class="code-input" spellcheck="false"
+              aria-label="LLM response"
+              placeholder="FUNC_0 recomputes VAR_2 on every call…"></textarea>
+
+    <div class="actions">
+      <button type="button" id="btn-translate" class="primary">Translate</button>
+    </div>
+
+    <p id="translate-status" class="status" role="status"></p>
+    <pre class="response-view" id="translate-output" hidden></pre>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='sessions.js') }}"></script>
+{% endblock %}

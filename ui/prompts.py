@@ -62,7 +62,11 @@ def ask_context_window() -> int:
         style=PROMPT_STYLE,
     ).ask()
     try:
-        return int(result)
+        # A negative window flows straight into get_context()'s start/end
+        # line arithmetic, which assumes k >= 0; it doesn't crash, but it
+        # produces an inverted range and a silently empty context snippet.
+        # The `abstract` CLI command enforces the same floor via `min=0`.
+        return max(0, int(result))
     except (ValueError, TypeError):
         return 3
 

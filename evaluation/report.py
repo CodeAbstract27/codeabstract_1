@@ -1,7 +1,7 @@
 """
 Evaluation Report Generator
 
-Consumes results from all 5 metric pillars and produces:
+Consumes results from all 6 metric pillars and produces:
   1. Rich terminal table (human-readable, coloured)
   2. JSON file (machine-readable, for paper tables)
   3. Markdown report (for paper appendix / documentation)
@@ -13,6 +13,8 @@ from datetime import datetime
 from typing import Optional
 
 from evaluation.metrics.classification import ClassificationResult
+from evaluation.adversary import AdversarySuiteResult
+from evaluation.metrics.mapping import MappingSuiteResult
 from evaluation.metrics.performance import PerformanceSuiteResult
 from evaluation.metrics.privacy import PrivacySuiteResult
 from evaluation.metrics.reconstruction import ReconstructionSuiteResult
@@ -30,6 +32,8 @@ def render_terminal_report(
     structure: StructureSuiteResult,
     performance: PerformanceSuiteResult,
     privacy_level: str = "high",
+    mapping: Optional[MappingSuiteResult] = None,
+    adversary: Optional[AdversarySuiteResult] = None,
 ) -> None:
     """Render a Rich-formatted terminal evaluation report."""
     from rich.console import Console
@@ -284,6 +288,8 @@ def save_json_report(
     performance: PerformanceSuiteResult,
     output_path: str,
     privacy_level: str = "high",
+    mapping: Optional[MappingSuiteResult] = None,
+    adversary: Optional[AdversarySuiteResult] = None,
 ) -> str:
     """Serialize all results to a JSON file and return the path."""
     report = {
@@ -368,6 +374,25 @@ def save_json_report(
                 for r in structure.per_file
             ],
         },
+        "pillar_6_mapping": ({
+            "mean_mapping_accuracy": mapping.mean_mapping_accuracy,
+            "mean_definition_accuracy": mapping.mean_definition_accuracy,
+            "mean_occurrence_accuracy": mapping.mean_occurrence_accuracy,
+            "mean_shadow_resolution": mapping.mean_shadow_resolution,
+            "mean_line_map_accuracy": mapping.mean_line_map_accuracy,
+            "total_shadowed_names": mapping.total_shadowed_names,
+            "per_file": [
+                {
+                    "file_name": r.file_name,
+                    "definition_accuracy": r.definition_accuracy,
+                    "occurrence_accuracy": r.occurrence_accuracy,
+                    "shadow_resolution": r.shadow_resolution,
+                    "line_map_accuracy": r.line_map_accuracy,
+                    "mapping_accuracy": r.mapping_accuracy,
+                }
+                for r in mapping.per_file
+            ],
+        } if mapping is not None else None),
         "pillar_5_performance": {
             "mean_abstraction_time_ms": performance.mean_abstraction_time_ms,
             "mean_reconstruction_time_ms": performance.mean_reconstruction_time_ms,
@@ -403,6 +428,123 @@ def save_json_report(
 # Markdown Report
 # ═══════════════════════════════════════════════════════════════════
 
+def _dataset_integrity_markdown() -> list:
+    """
+    Render the dataset-integrity section (Phase 2).
+
+    Placed directly under the classification pillar so that nobody reads
+    the macro-F1 without also reading how much of it the patterns under
+    test already determine.
+    """
+    try:
+        from evaluation.benchmarks.annotation import (
+            circularity_report, load_legacy_dataset,
+        )
+        audit = circularity_report(load_legacy_dataset())
+    except Exception:
+        return []
+
+    lines = ["\n---\n", "## Dataset Integrity (Pillar 3 caveat)\n"]
+    lines.append(
+        "The classification F1 above is computed on a dataset whose labels "
+        "were derived from the same patterns it grades. These figures "
+        "measure how far that compromises the result.\n"
+    )
+    lines.append("| Check | Value | Reading |")
+    lines.append("|-------|-------|---------|")
+    lines.append(
+        f"| Regex baseline accuracy | {audit.baseline_accuracy:.4f} | "
+        f"the score any name-regex achieves by construction |"
+    )
+    lines.append(
+        f"| Discriminative power | {audit.discriminative_power:.4f} | "
+        f"only {audit.discriminative_items} of {audit.n_items} items can "
+        f"separate two detectors |"
+    )
+    lines.append(
+        f"| Rationale leakage | {audit.rationale_leakage:.4f} | "
+        f"share of labels justified by quoting the pattern list |"
+    )
+    lines.append(
+        f"| Annotated blind | {audit.blind_fraction:.4f} | "
+        f"share labelled without sight of the patterns |"
+    )
+    lines.append(
+        f"| Provenance recorded | {audit.sourced_fraction:.4f} | "
+        f"share traceable to real-world code |"
+    )
+    lines.append(
+        f"\n**Usable for detector comparison:** "
+        f"{'yes' if audit.is_usable else 'no'}\n"
+    )
+    for note in audit.notes:
+        lines.append(f"- {note}")
+    return lines
+
+
+def _adversary_markdown(adversary) -> list:
+    """Render the Pillar 7 section (Phase 3)."""
+    if adversary is None:
+        return []
+
+    lines = ["\n---\n", "## Pillar 7 - Adversarial Re-identification\n"]
+    lines.append(
+        "An attacker holding the original files and one abstracted file "
+        "tries to say which file it came from. Structure survives "
+        "abstraction by design, so this measures what that design costs.\n"
+    )
+    lines.append(
+        "| Privacy level | Top-1 | Top-3 | MRR | CPE | Advantage over chance | Identifiers surviving |"
+    )
+    lines.append("|---|---|---|---|---|---|---|")
+    for level, report in adversary.per_level.items():
+        lines.append(
+            f"| `{level}` | {report.top1_accuracy:.3f} | {report.top3_accuracy:.3f} | "
+            f"{report.mean_reciprocal_rank:.3f} | {report.code_privacy_entropy:.4f} | "
+            f"{report.advantage:.3f} | "
+            f"{adversary.mean_survival_rate.get(level, 0):.3f} |"
+        )
+
+    any_report = next(iter(adversary.per_level.values()), None)
+    if any_report is not None:
+        lines.append(
+            f"\nRandom-guess baseline: {any_report.random_baseline:.4f} "
+            f"({any_report.n_files} candidates). "
+            f"CPE 1.0 = attacker learned nothing; 0.0 = attacker is certain.\n"
+        )
+        lines.append(f"**Verdict:** {any_report.verdict()}\n")
+
+    lines.append(
+        "The token scheme also labels its own findings: `SECRET_n` marks "
+        "where a credential sat, which the original identifier may not have "
+        "revealed. Mean SECRET tokens per file, by level:\n"
+    )
+    for level, count in adversary.mean_secret_positions.items():
+        lines.append(f"- `{level}`: {count:.1f}")
+    return lines
+
+
+def _mapping_markdown(mapping) -> list:
+    """Render the Pillar 6 section (Phase 1)."""
+    if mapping is None:
+        return []
+
+    lines = ["\n---\n", "## Pillar 6 — Mapping Accuracy\n"]
+    lines.append(f"**Mean Mapping Accuracy**: {mapping.mean_mapping_accuracy:.4f}  ")
+    lines.append(f"**Definition-Site Accuracy**: {mapping.mean_definition_accuracy:.4f}  ")
+    lines.append(f"**Occurrence Accuracy**: {mapping.mean_occurrence_accuracy:.4f}  ")
+    lines.append(f"**Shadow Resolution**: {mapping.mean_shadow_resolution:.4f}  ")
+    lines.append(f"**Line-Map Accuracy**: {mapping.mean_line_map_accuracy:.4f}\n")
+    lines.append("| File | Definition | Occurrence | Shadow | Line Map | Overall |")
+    lines.append("|------|-----------|-----------|--------|----------|---------|")
+    for r in mapping.per_file:
+        lines.append(
+            f"| {r.file_name} | {r.definition_accuracy:.3f} | {r.occurrence_accuracy:.3f} | "
+            f"{r.shadow_resolution:.3f} | {r.line_map_accuracy:.3f} | {r.mapping_accuracy:.3f} |"
+        )
+    return lines
+
+
 def save_markdown_report(
     privacy: PrivacySuiteResult,
     reconstruction: ReconstructionSuiteResult,
@@ -411,6 +553,8 @@ def save_markdown_report(
     performance: PerformanceSuiteResult,
     output_path: str,
     privacy_level: str = "high",
+    mapping: Optional[MappingSuiteResult] = None,
+    adversary: Optional[AdversarySuiteResult] = None,
 ) -> str:
     """Save a full Markdown evaluation report and return the path."""
     lines = []
@@ -430,6 +574,8 @@ def save_markdown_report(
     lines.append(f"| AST Isomorphism Score | {structure.mean_ast_isomorphism:.4f} | 1.00 | {'✅' if structure.mean_ast_isomorphism >= 0.99 else '⚠️'} |")
     lines.append(f"| Syntax Validity Rate | {structure.syntax_validity_rate:.1%} | 100% | {'✅' if structure.syntax_validity_rate == 1.0 else '❌'} |")
     lines.append(f"| Throughput (LOC/sec) | {performance.mean_throughput_loc_per_sec:,.0f} | ≥ 1,000 | {'✅' if performance.mean_throughput_loc_per_sec >= 1000 else '⚠️'} |")
+    if mapping is not None:
+        lines.append(f"| Mapping Accuracy | {mapping.mean_mapping_accuracy:.4f} | ≥ 0.85 | {'✅' if mapping.mean_mapping_accuracy >= 0.85 else '⚠️'} |")
 
     lines.append("\n---\n")
     lines.append("## Pillar 1 — Privacy Leakage (PIR)\n")
@@ -502,6 +648,10 @@ def save_markdown_report(
     lines.append("|-----|----------------------|-------------------|")
     for pt in performance.scaling_curve:
         lines.append(f"| {pt.loc} | {pt.abstraction_time_ms:.1f} | {pt.throughput_loc_per_sec:,.0f} |")
+
+    lines.extend(_mapping_markdown(mapping))
+    lines.extend(_adversary_markdown(adversary))
+    lines.extend(_dataset_integrity_markdown())
 
     md_path = os.path.join(output_path, "evaluation_report.md")
     with open(md_path, "w", encoding="utf-8") as f:

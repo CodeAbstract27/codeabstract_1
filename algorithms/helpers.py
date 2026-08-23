@@ -46,7 +46,10 @@ BUILTINS: Set[str] = {
 }
 
 
-def is_semantically_significant(node: ast.AST) -> bool:
+def is_semantically_significant(
+    node: ast.AST,
+    privacy_level: str = "high",
+) -> bool:
     """
     IsSemanticallySig(E) — Node Filter.
 
@@ -54,8 +57,15 @@ def is_semantically_significant(node: ast.AST) -> bool:
     should be abstracted.  Filters out builtins, single-character
     loop variables, and dunder names.
 
+    Phase 0 / D5: the single-character rule is now governed by the privacy
+    level.  Previously short names were dropped unconditionally, which made
+    ``critical`` byte-identical to ``high`` and left the documented
+    ``abstract_short_names`` flag with no effect anywhere in the system.
+
     Args:
         node: AST node E.
+        privacy_level: Privacy level (low|medium|high|critical).  At
+            ``critical``, single-character identifiers are abstracted too.
 
     Returns:
         True if the node should be abstracted, False otherwise.
@@ -63,6 +73,8 @@ def is_semantically_significant(node: ast.AST) -> bool:
     Implements:
         IsSemanticallySig helper from formal specification.
     """
+    from config.settings import PRIVACY_LEVELS
+
     name = _extract_name(node)
 
     if not name:
@@ -73,9 +85,12 @@ def is_semantically_significant(node: ast.AST) -> bool:
         return False
 
     # Rule 2: Skip single-character names (loop vars: i, j, x, y, …)
-    #         but not numeric constants (e.g. 0, 5)
-    if len(name) <= 1 and not isinstance(node, ast.Constant):
-        return False
+    #         but not numeric constants (e.g. 0, 5).
+    #         At the 'critical' level, abstract these too.
+    level = PRIVACY_LEVELS.get(privacy_level, PRIVACY_LEVELS["medium"])
+    if not level.get("abstract_short_names", False):
+        if len(name) <= 1 and not isinstance(node, ast.Constant):
+            return False
 
     # Rule 3: Skip dunder names (__init__, __main__, __name__, …)
     if name.startswith('__') and name.endswith('__'):
@@ -97,6 +112,13 @@ def _extract_name(node: ast.AST) -> Optional[str]:
         return node.arg
     elif isinstance(node, ast.Attribute):
         return node.attr
+    elif isinstance(node, ast.alias):
+        # Phase 0 / D3: the binding an import introduces is the asname if
+        # present, otherwise the *root* of the dotted path — 'import a.b.c'
+        # binds the name 'a'.
+        if node.asname:
+            return node.asname
+        return node.name.split('.', 1)[0]
     elif isinstance(node, ast.Constant):
         return str(node.value)
     return None
@@ -115,7 +137,8 @@ def label_to_prefix(label: str, node_type: str, node: ast.AST = None) -> str:
         node: Optional AST node for finer-grained type detection.
 
     Returns:
-        Token prefix string: 'SECRET', 'FUNC', 'NUM', 'CONST', or 'VAR'.
+        Token prefix string: 'SECRET', 'MODULE', 'FUNC', 'CLASS', 'NUM',
+        'CONST', or 'VAR'.
 
     Implements:
         LabelToPrefix helper from formal specification.
@@ -123,6 +146,10 @@ def label_to_prefix(label: str, node_type: str, node: ast.AST = None) -> str:
     # Rule 1: SECRET label always → "SECRET"
     if label == 'SECRET':
         return 'SECRET'
+
+    # Rule 1b: Imports → "MODULE" (Phase 0 / D3)
+    if node_type == 'alias':
+        return 'MODULE'
 
     # Rule 2: Function definitions → "FUNC"
     if node_type in ('FunctionDef', 'AsyncFunctionDef'):
