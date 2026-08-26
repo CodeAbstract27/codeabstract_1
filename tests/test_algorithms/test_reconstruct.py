@@ -75,7 +75,7 @@ class TestReconstruct:
         result = reconstruct(response, enc, key)
         assert 'commission_rate' in result
         assert 'line 3' in result
-        assert 'Source Context' in result
+        assert 'Source References' in result
 
     def test_reconstruct_no_tokens(self):
         """Response with no tokens should be returned unchanged."""
@@ -166,7 +166,7 @@ class TestReconstructTokenExtraction:
         enc, key = self._enc(mapping)
         # 'FUNC_0' appears twice → deduplicated → one context block
         result = reconstruct("FUNC_0 calls FUNC_0", enc, key)
-        assert result.count("Source Context") == 1
+        assert result.count("Source References") == 1
 
     def test_no_tokens_in_response(self):
         """Response with no tokens should be returned verbatim."""
@@ -193,14 +193,19 @@ class TestReconstructContextFormatting:
         return encrypt_mapping(mapping)
 
     def test_context_block_shows_arrow_on_target_line(self):
-        """The target line should be marked with → in context block."""
+        """The target line should be marked with → in context block.
+
+        Only tokens with significant prefixes (FUNC, CLASS, SECRET) get
+        full context blocks with arrow markers.  VAR tokens go into the
+        compact 'Other referenced identifiers' list instead.
+        """
         mapping = {
-            'VAR_0': {
-                'name': 'commission_rate',
-                'label': 'VALUE',
+            'FUNC_0': {
+                'name': 'calculate_commission',
+                'label': 'IDENTIFIER',
                 'lineno': 3,
                 'ctx': {
-                    'snippet': 'line1\nline2\ncommission_rate = 0.029\nline4\nline5',
+                    'snippet': 'line1\nline2\ndef calculate_commission(amount):\nline4\nline5',
                     'start_line': 1,
                     'end_line': 5,
                     'target_line': 3,
@@ -208,9 +213,9 @@ class TestReconstructContextFormatting:
             },
         }
         enc, key = self._enc(mapping)
-        result = reconstruct("VAR_0 is the issue", enc, key)
+        result = reconstruct("FUNC_0 is the issue", enc, key)
         assert "→" in result
-        assert "commission_rate = 0.029" in result
+        assert "def calculate_commission(amount):" in result
 
     def test_context_block_shows_no_context_when_empty(self):
         """When ctx is empty dict, context block should say 'no context available'."""

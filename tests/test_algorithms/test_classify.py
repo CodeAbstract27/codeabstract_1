@@ -160,34 +160,25 @@ class TestClassifyConstantNodes:
 
 
 class TestClassifyAttributeNodes:
-    """Attribute AST nodes classification.
+    """Attribute AST nodes classification."""
 
-    Note: The classify module's _get_node_text does NOT extract `.attr`
-    from Attribute nodes (it is not a handled type there). Attribute nodes
-    therefore always return IDENTIFIER from classify_node directly.
-    The actual Attribute abstraction relies on is_semantically_significant
-    and label_to_prefix, not on classify_node's pattern matching.
-    These tests document and lock in the current behaviour.
-    """
-
-    def test_attribute_node_returns_identifier(self):
-        """Attribute nodes currently return IDENTIFIER (no pattern matching on .attr)."""
+    def test_attribute_secret_classified_correctly(self):
+        """Attribute with secret name (e.g. self.api_key) should classify as SECRET."""
         node = ast.Attribute(
             value=ast.Name(id="self", ctx=ast.Load()),
             attr="api_key",
             ctx=ast.Load(),
         )
-        # Current behaviour: Attribute has no text in _get_node_text → IDENTIFIER
-        assert classify_node(node) == "IDENTIFIER"
+        assert classify_node(node) == "SECRET"
 
-    def test_attribute_timeout_returns_identifier(self):
-        """Even value-named attributes return IDENTIFIER from classify_node."""
+    def test_attribute_value_classified_correctly(self):
+        """Attribute with value name (e.g. self.timeout_seconds) should classify as VALUE."""
         node = ast.Attribute(
             value=ast.Name(id="self", ctx=ast.Load()),
             attr="timeout_seconds",
             ctx=ast.Load(),
         )
-        assert classify_node(node) == "IDENTIFIER"
+        assert classify_node(node) == "VALUE"
 
     def test_attribute_generic_is_identifier(self):
         """Generic attribute name should classify as IDENTIFIER."""
@@ -196,6 +187,40 @@ class TestClassifyAttributeNodes:
             attr="handler",
             ctx=ast.Load(),
         )
+        assert classify_node(node) == "IDENTIFIER"
+
+
+class TestClassifyAnnAssignAndKeywordNodes:
+    """Type-annotated assignments and keyword arguments classification."""
+
+    def test_ann_assign_secret_target(self):
+        """AnnAssign with secret name (api_key: str = '...') -> SECRET."""
+        node = ast.AnnAssign(
+            target=ast.Name(id="api_key", ctx=ast.Store()),
+            annotation=ast.Name(id="str", ctx=ast.Load()),
+            value=ast.Constant(value="sk-test12345"),
+            simple=1,
+        )
+        assert classify_node(node) == "SECRET"
+
+    def test_ann_assign_value_target(self):
+        """AnnAssign with value name (timeout: int = 30) -> VALUE."""
+        node = ast.AnnAssign(
+            target=ast.Name(id="timeout_seconds", ctx=ast.Store()),
+            annotation=ast.Name(id="int", ctx=ast.Load()),
+            value=ast.Constant(value=30),
+            simple=1,
+        )
+        assert classify_node(node) == "VALUE"
+
+    def test_keyword_argument_secret(self):
+        """Keyword argument like api_key='...' -> SECRET."""
+        node = ast.keyword(arg="api_key", value=ast.Constant(value="test"))
+        assert classify_node(node) == "SECRET"
+
+    def test_keyword_argument_generic(self):
+        """Keyword argument like buffer_size=1024 -> IDENTIFIER."""
+        node = ast.keyword(arg="buffer_size", value=ast.Constant(value=1024))
         assert classify_node(node) == "IDENTIFIER"
 
 

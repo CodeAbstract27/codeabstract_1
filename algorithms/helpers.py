@@ -97,6 +97,12 @@ def _extract_name(node: ast.AST) -> Optional[str]:
         return node.arg
     elif isinstance(node, ast.Attribute):
         return node.attr
+    elif isinstance(node, ast.keyword) and node.arg:
+        return node.arg
+    elif hasattr(ast, 'MatchAs') and isinstance(node, ast.MatchAs) and node.name:
+        return node.name
+    elif hasattr(ast, 'MatchStar') and isinstance(node, ast.MatchStar) and node.name:
+        return node.name
     elif isinstance(node, ast.Constant):
         return str(node.value)
     return None

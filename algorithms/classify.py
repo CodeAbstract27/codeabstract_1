@@ -84,6 +84,14 @@ def _get_node_text(node: ast.AST) -> str:
         text_parts.append(node.name)
     elif isinstance(node, ast.arg):
         text_parts.append(node.arg)
+    elif isinstance(node, ast.Attribute):
+        text_parts.append(node.attr)
+    elif isinstance(node, ast.keyword) and node.arg:
+        text_parts.append(node.arg)
+    elif hasattr(ast, 'MatchAs') and isinstance(node, ast.MatchAs) and node.name:
+        text_parts.append(node.name)
+    elif hasattr(ast, 'MatchStar') and isinstance(node, ast.MatchStar) and node.name:
+        text_parts.append(node.name)
 
     # Extract literal value from Constant nodes
     if isinstance(node, ast.Constant):
@@ -94,7 +102,18 @@ def _get_node_text(node: ast.AST) -> str:
         for target in node.targets:
             if isinstance(target, ast.Name):
                 text_parts.append(target.id)
+            elif isinstance(target, ast.Attribute):
+                text_parts.append(target.attr)
         if isinstance(node.value, ast.Constant):
+            text_parts.append(str(node.value.value))
+
+    # For type-annotated assignment nodes (e.g. api_key: str = "...")
+    elif isinstance(node, ast.AnnAssign):
+        if isinstance(node.target, ast.Name):
+            text_parts.append(node.target.id)
+        elif isinstance(node.target, ast.Attribute):
+            text_parts.append(node.target.attr)
+        if node.value and isinstance(node.value, ast.Constant):
             text_parts.append(str(node.value.value))
 
     return ' '.join(text_parts)

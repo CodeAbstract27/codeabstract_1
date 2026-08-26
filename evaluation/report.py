@@ -51,13 +51,13 @@ def render_terminal_report(
     ))
 
     # ── Pillar 1: Privacy ──────────────────────────────────────────
-    console.print("\n[bold yellow]▶ Pillar 1 — Privacy Leakage (PIR)[/bold yellow]")
+    console.print("\n[bold yellow]> Pillar 1 — Privacy Leakage (PIR)[/bold yellow]")
     t = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style="bold")
     t.add_column("File", style="cyan", min_width=24)
     t.add_column("SECRET Leakage", justify="right")
     t.add_column("VALUE Leakage", justify="right")
     t.add_column("Overall PIR", justify="right")
-    t.add_column("✓", justify="center")
+    t.add_column("Pass", justify="center")
 
     for r in privacy.per_file:
         pir_color = "green" if r.overall_pir <= 0.05 else ("yellow" if r.overall_pir <= 0.20 else "red")
@@ -66,7 +66,7 @@ def render_terminal_report(
             f"{r.secret_leakage_rate:.1%}",
             f"{r.value_leakage_rate:.1%}",
             f"[{pir_color}]{r.overall_pir:.4f}[/{pir_color}]",
-            "✓" if r.overall_pir <= 0.05 else "⚠",
+            "PASS" if r.overall_pir <= 0.05 else "WARN",
         )
 
     t.add_section()
@@ -82,7 +82,7 @@ def render_terminal_report(
     console.print(f"  Syntax validity rate: [green]{privacy.syntax_validity_rate:.1%}[/green]")
 
     # ── Pillar 2: Reconstruction ───────────────────────────────────
-    console.print("\n[bold yellow]▶ Pillar 2 — Reconstruction Fidelity (RF)[/bold yellow]")
+    console.print("\n[bold yellow]> Pillar 2 — Reconstruction Fidelity (RF)[/bold yellow]")
     t2 = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style="bold")
     t2.add_column("File", style="cyan", min_width=24)
     t2.add_column("Tokens", justify="right")
@@ -97,13 +97,13 @@ def render_terminal_report(
             str(r.tokens_in_simulated_response),
             f"[{hr_color}]{r.token_hit_rate:.1%}[/{hr_color}]",
             f"{r.roundtrip_fidelity:.4f}",
-            "✓" if r.has_context_blocks else "–",
+            "YES" if r.has_context_blocks else "-",
         )
 
     t2.add_section()
     t2.add_row(
         "[bold]MEAN[/bold]",
-        "–",
+        "-",
         f"[bold]{reconstruction.mean_token_hit_rate:.1%}[/bold]",
         f"[bold]{reconstruction.mean_roundtrip_fidelity:.4f}[/bold]",
         f"[bold]{reconstruction.context_block_rate:.1%}[/bold]",
@@ -111,7 +111,7 @@ def render_terminal_report(
     console.print(t2)
 
     # ── Pillar 3: Classification ───────────────────────────────────
-    console.print("\n[bold yellow]▶ Pillar 3 — Classification Accuracy (F1)[/bold yellow]")
+    console.print("\n[bold yellow]> Pillar 3 — Classification Accuracy (F1)[/bold yellow]")
     t3 = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style="bold")
     t3.add_column("Class", style="cyan")
     t3.add_column("Precision", justify="right")
@@ -162,7 +162,7 @@ def render_terminal_report(
     console.print(cm_table)
 
     # ── Pillar 4: Structure ────────────────────────────────────────
-    console.print("\n[bold yellow]▶ Pillar 4 — Code Structure Preservation[/bold yellow]")
+    console.print("\n[bold yellow]> Pillar 4 — Code Structure Preservation[/bold yellow]")
     t4 = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style="bold")
     t4.add_column("File", style="cyan", min_width=24)
     t4.add_column("Syntax Valid", justify="center")
@@ -173,7 +173,7 @@ def render_terminal_report(
     for r in structure.per_file:
         t4.add_row(
             r.file_name,
-            "[green]✓[/green]" if r.syntax_valid else "[red]✗[/red]",
+            "[green]YES[/green]" if r.syntax_valid else "[red]NO[/red]",
             f"{r.ast_isomorphism_score:.4f}",
             f"[green]{r.cyclomatic_complexity_delta}[/green]" if r.cyclomatic_complexity_delta == 0 else f"[yellow]{r.cyclomatic_complexity_delta}[/yellow]",
             f"{r.abstraction_density:.1%}",
@@ -190,7 +190,7 @@ def render_terminal_report(
     console.print(t4)
 
     # ── Pillar 5: Performance ──────────────────────────────────────
-    console.print("\n[bold yellow]▶ Pillar 5 — Performance[/bold yellow]")
+    console.print("\n[bold yellow]> Pillar 5 — Performance[/bold yellow]")
     t5 = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style="bold")
     t5.add_column("File", style="cyan", min_width=24)
     t5.add_column("LOC", justify="right")
@@ -221,12 +221,12 @@ def render_terminal_report(
     console.print(t5)
 
     # Scaling curve
-    console.print("\n  [dim]Scaling Curve (LOC → Abstraction Time):[/dim]")
+    console.print("\n  [dim]Scaling Curve (LOC -> Abstraction Time):[/dim]")
     for pt in performance.scaling_curve:
         bar_len = min(30, int(pt.abstraction_time_ms / 2))
-        bar = "█" * bar_len
+        bar = "#" * bar_len
         console.print(
-            f"  {pt.loc:>5} LOC │ {bar:<30} {pt.abstraction_time_ms:>7.1f} ms  "
+            f"  {pt.loc:>5} LOC | {bar:<30} {pt.abstraction_time_ms:>7.1f} ms  "
             f"({pt.throughput_loc_per_sec:,.0f} LOC/s)"
         )
 
@@ -236,7 +236,7 @@ def render_terminal_report(
         f"[bold]Privacy (PIR @ {privacy_level}):[/bold]  {_pir_badge(privacy.mean_pir)}",
         f"[bold]Reconstruction Fidelity:[/bold]   {_rf_badge(reconstruction.mean_token_hit_rate)}",
         f"[bold]Classification Macro-F1:[/bold]   {_f1_badge(classification.macro_f1)}",
-        f"[bold]AST Isomorphism:[/bold]           {structure.mean_ast_isomorphism:.4f}  ({'✓ Perfect' if structure.mean_ast_isomorphism >= 1.0 else 'Near perfect'})",
+        f"[bold]AST Isomorphism:[/bold]           {structure.mean_ast_isomorphism:.4f}  ({'[PASS] Perfect' if structure.mean_ast_isomorphism >= 1.0 else 'Near perfect'})",
         f"[bold]Syntax Validity:[/bold]           {structure.syntax_validity_rate:.1%}",
         f"[bold]Throughput:[/bold]                {performance.mean_throughput_loc_per_sec:,.0f} LOC/sec",
     ]
@@ -250,26 +250,26 @@ def render_terminal_report(
 
 def _pir_badge(pir: float) -> str:
     if pir <= 0.05:
-        return f"[green]{pir:.4f} ✓ Excellent[/green]"
+        return f"[green]{pir:.4f} [PASS] Excellent[/green]"
     elif pir <= 0.15:
-        return f"[yellow]{pir:.4f} ⚠ Acceptable[/yellow]"
-    return f"[red]{pir:.4f} ✗ Poor[/red]"
+        return f"[yellow]{pir:.4f} [WARN] Acceptable[/yellow]"
+    return f"[red]{pir:.4f} [FAIL] Poor[/red]"
 
 
 def _rf_badge(rf: float) -> str:
     if rf >= 0.95:
-        return f"[green]{rf:.1%} ✓ Excellent[/green]"
+        return f"[green]{rf:.1%} [PASS] Excellent[/green]"
     elif rf >= 0.80:
-        return f"[yellow]{rf:.1%} ⚠ Acceptable[/yellow]"
-    return f"[red]{rf:.1%} ✗ Poor[/red]"
+        return f"[yellow]{rf:.1%} [WARN] Acceptable[/yellow]"
+    return f"[red]{rf:.1%} [FAIL] Poor[/red]"
 
 
 def _f1_badge(f1: float) -> str:
     if f1 >= 0.85:
-        return f"[green]{f1:.4f} ✓ Excellent[/green]"
+        return f"[green]{f1:.4f} [PASS] Excellent[/green]"
     elif f1 >= 0.70:
-        return f"[yellow]{f1:.4f} ⚠ Acceptable[/yellow]"
-    return f"[red]{f1:.4f} ✗ Needs improvement[/red]"
+        return f"[yellow]{f1:.4f} [WARN] Acceptable[/yellow]"
+    return f"[red]{f1:.4f} [FAIL] Needs improvement[/red]"
 
 
 # ═══════════════════════════════════════════════════════════════════

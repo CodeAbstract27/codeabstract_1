@@ -1,6 +1,6 @@
 # CodeAbstract — Evaluation Report
 
-> Generated: 2026-08-07 23:38:04  
+> Generated: 2026-08-26 15:48:45  
 > Privacy Level: `high`  
 > Corpus: 10 files | Labeled dataset: 150 nodes
 
@@ -15,7 +15,7 @@
 | Classification Macro-F1 | 0.8937 | ≥ 0.85 | ✅ |
 | AST Isomorphism Score | 1.0000 | 1.00 | ✅ |
 | Syntax Validity Rate | 100.0% | 100% | ✅ |
-| Throughput (LOC/sec) | 0 | ≥ 1,000 | ⚠️ |
+| Throughput (LOC/sec) | 4,712 | ≥ 1,000 | ✅ |
 
 ---
 
@@ -41,17 +41,17 @@
 
 | File | Tokens | Hit Rate | Roundtrip Fidelity |
 |------|--------|----------|--------------------|
-| api_client | 47 | 100.0% | 0.2491 |
-| ecommerce_pricing | 47 | 100.0% | 0.2337 |
-| ml_pipeline | 64 | 100.0% | 0.2873 |
-| web_server_config | 41 | 100.0% | 0.3605 |
-| simple_utility | 44 | 100.0% | 0.0331 |
-| auth_service | 57 | 100.0% | 0.2045 |
-| financial_calculator | 46 | 100.0% | 0.2061 |
-| database_layer | 48 | 100.0% | 0.3320 |
-| microservice_router | 47 | 100.0% | 0.3502 |
-| analytics_engine | 52 | 100.0% | 0.2597 |
-| **Mean** | – | **100.0%** | **0.2516** |
+| api_client | 47 | 100.0% | 0.0654 |
+| ecommerce_pricing | 47 | 100.0% | 0.3113 |
+| ml_pipeline | 64 | 100.0% | 0.2000 |
+| web_server_config | 41 | 100.0% | 0.1210 |
+| simple_utility | 44 | 100.0% | 0.3757 |
+| auth_service | 57 | 100.0% | 0.2035 |
+| financial_calculator | 46 | 100.0% | 0.4354 |
+| database_layer | 48 | 100.0% | 0.3240 |
+| microservice_router | 47 | 100.0% | 0.1520 |
+| analytics_engine | 52 | 100.0% | 0.2857 |
+| **Mean** | – | **100.0%** | **0.2474** |
 
 ---
 
@@ -100,14 +100,29 @@
 
 ## Pillar 5 — Performance
 
-**Mean Throughput**: 0 LOC/sec  
-**Mean Abstraction Time**: 0.0 ms  
-**Mean Encryption Round-trip**: 0.0 ms
+**Mean Throughput**: 4,712 LOC/sec  
+**Mean Abstraction Time**: 8.8 ms  
+**Mean Encryption Round-trip**: 1.6 ms
 
 | File | LOC | Abstract (ms) | Reconstruct (ms) | Throughput (LOC/s) |
 |------|-----|--------------|-----------------|-------------------|
+| api_client | 42 | 10.2 | 1.1 | 4,133 |
+| ecommerce_pricing | 39 | 10.3 | 0.9 | 3,788 |
+| ml_pipeline | 48 | 16.1 | 0.8 | 2,985 |
+| web_server_config | 31 | 6.2 | 0.5 | 5,024 |
+| simple_utility | 41 | 9.7 | 0.8 | 4,223 |
+| auth_service | 42 | 8.4 | 0.7 | 4,990 |
+| financial_calculator | 33 | 6.6 | 0.8 | 4,994 |
+| database_layer | 41 | 6.6 | 0.5 | 6,207 |
+| microservice_router | 36 | 6.6 | 1.1 | 5,484 |
+| analytics_engine | 37 | 7.0 | 0.7 | 5,291 |
 
 ### Scaling Curve
 
 | LOC | Abstraction Time (ms) | Throughput (LOC/s) |
 |-----|----------------------|-------------------|
+| 39 | 14.9 | 2,609 |
+| 78 | 16.2 | 4,809 |
+| 117 | 18.4 | 6,344 |
+| 195 | 39.9 | 4,883 |
+| 312 | 44.6 | 6,998 |

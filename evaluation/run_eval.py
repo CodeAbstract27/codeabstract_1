@@ -159,8 +159,8 @@ Examples:
         privacy_level=privacy_level,
     )
 
-    console.print(f"[green]✓[/green] JSON report saved: [cyan]{json_path}[/cyan]")
-    console.print(f"[green]✓[/green] Markdown report saved: [cyan]{md_path}[/cyan]\n")
+    console.print(f"[green][OK][/green] JSON report saved: [cyan]{json_path}[/cyan]")
+    console.print(f"[green][OK][/green] Markdown report saved: [cyan]{md_path}[/cyan]\n")
 
 
 if __name__ == "__main__":
