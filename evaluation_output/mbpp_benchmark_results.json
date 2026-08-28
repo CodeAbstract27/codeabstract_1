@@ -1,0 +1,12 @@
+{
+  "dataset": "MBPP",
+  "compilation_rate": 100.0,
+  "pass@1": 100.0,
+  "edit_distance": 53.301629450894765,
+  "eccc_functional": 10.0,
+  "eccc_privacy": 9.2,
+  "eccc_cleanliness": 10.0,
+  "reconstruction_fidelity": 100.0,
+  "latency_ms": 4.642620007507503,
+  "throughput": 689.265973701344
+}

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "timestamp": "2026-08-26T15:48:45.255914",
+    "timestamp": "2026-08-28T20:01:16.255385",
     "privacy_level": "high",
     "files_evaluated": 10
   },
@@ -339,109 +339,109 @@
     ]
   },
   "pillar_5_performance": {
-    "mean_abstraction_time_ms": 8.76,
-    "mean_reconstruction_time_ms": 0.801,
-    "mean_encryption_time_ms": 1.565,
-    "mean_pipeline_time_ms": 11.126,
-    "mean_throughput_loc_per_sec": 4712.0,
-    "peak_throughput_loc_per_sec": 6207.4,
+    "mean_abstraction_time_ms": 6.886,
+    "mean_reconstruction_time_ms": 0.621,
+    "mean_encryption_time_ms": 1.935,
+    "mean_pipeline_time_ms": 9.442,
+    "mean_throughput_loc_per_sec": 6365.9,
+    "peak_throughput_loc_per_sec": 8310.2,
     "scaling_curve": [
       {
         "loc": 39,
-        "abstraction_time_ms": 14.946,
-        "throughput_loc_per_sec": 2609.4
+        "abstraction_time_ms": 5.241,
+        "throughput_loc_per_sec": 7441.3
       },
       {
         "loc": 78,
-        "abstraction_time_ms": 16.219,
-        "throughput_loc_per_sec": 4809.2
+        "abstraction_time_ms": 9.038,
+        "throughput_loc_per_sec": 8630.2
       },
       {
         "loc": 117,
-        "abstraction_time_ms": 18.443,
-        "throughput_loc_per_sec": 6343.9
+        "abstraction_time_ms": 16.714,
+        "throughput_loc_per_sec": 7000.1
       },
       {
         "loc": 195,
-        "abstraction_time_ms": 39.938,
-        "throughput_loc_per_sec": 4882.6
+        "abstraction_time_ms": 32.408,
+        "throughput_loc_per_sec": 6017.0
       },
       {
         "loc": 312,
-        "abstraction_time_ms": 44.581,
-        "throughput_loc_per_sec": 6998.5
+        "abstraction_time_ms": 41.737,
+        "throughput_loc_per_sec": 7475.4
       }
     ],
     "per_file": [
       {
         "file": "api_client",
         "loc": 42,
-        "abstraction_time_ms": 10.162,
-        "reconstruction_time_ms": 1.127,
-        "throughput_loc_per_sec": 4133.0
+        "abstraction_time_ms": 6.409,
+        "reconstruction_time_ms": 0.748,
+        "throughput_loc_per_sec": 6553.3
       },
       {
         "file": "ecommerce_pricing",
         "loc": 39,
-        "abstraction_time_ms": 10.297,
-        "reconstruction_time_ms": 0.918,
-        "throughput_loc_per_sec": 3787.5
+        "abstraction_time_ms": 6.936,
+        "reconstruction_time_ms": 0.702,
+        "throughput_loc_per_sec": 5622.8
       },
       {
         "file": "ml_pipeline",
         "loc": 48,
-        "abstraction_time_ms": 16.079,
-        "reconstruction_time_ms": 0.798,
-        "throughput_loc_per_sec": 2985.3
+        "abstraction_time_ms": 8.83,
+        "reconstruction_time_ms": 0.72,
+        "throughput_loc_per_sec": 5436.0
       },
       {
         "file": "web_server_config",
         "loc": 31,
-        "abstraction_time_ms": 6.17,
-        "reconstruction_time_ms": 0.529,
-        "throughput_loc_per_sec": 5024.3
+        "abstraction_time_ms": 6.111,
+        "reconstruction_time_ms": 0.669,
+        "throughput_loc_per_sec": 5072.8
       },
       {
         "file": "simple_utility",
         "loc": 41,
-        "abstraction_time_ms": 9.709,
-        "reconstruction_time_ms": 0.826,
-        "throughput_loc_per_sec": 4222.9
+        "abstraction_time_ms": 15.483,
+        "reconstruction_time_ms": 0.795,
+        "throughput_loc_per_sec": 2648.1
       },
       {
         "file": "auth_service",
         "loc": 42,
-        "abstraction_time_ms": 8.417,
-        "reconstruction_time_ms": 0.748,
-        "throughput_loc_per_sec": 4989.9
+        "abstraction_time_ms": 6.388,
+        "reconstruction_time_ms": 0.612,
+        "throughput_loc_per_sec": 6574.8
       },
       {
         "file": "financial_calculator",
         "loc": 33,
-        "abstraction_time_ms": 6.608,
-        "reconstruction_time_ms": 0.818,
-        "throughput_loc_per_sec": 4993.9
+        "abstraction_time_ms": 3.971,
+        "reconstruction_time_ms": 0.409,
+        "throughput_loc_per_sec": 8310.2
       },
       {
         "file": "database_layer",
         "loc": 41,
-        "abstraction_time_ms": 6.605,
-        "reconstruction_time_ms": 0.521,
-        "throughput_loc_per_sec": 6207.4
+        "abstraction_time_ms": 5.831,
+        "reconstruction_time_ms": 0.451,
+        "throughput_loc_per_sec": 7031.4
       },
       {
         "file": "microservice_router",
         "loc": 36,
-        "abstraction_time_ms": 6.564,
-        "reconstruction_time_ms": 1.066,
-        "throughput_loc_per_sec": 5484.5
+        "abstraction_time_ms": 4.409,
+        "reconstruction_time_ms": 0.456,
+        "throughput_loc_per_sec": 8165.1
       },
       {
         "file": "analytics_engine",
         "loc": 37,
-        "abstraction_time_ms": 6.993,
-        "reconstruction_time_ms": 0.661,
-        "throughput_loc_per_sec": 5291.0
+        "abstraction_time_ms": 4.488,
+        "reconstruction_time_ms": 0.645,
+        "throughput_loc_per_sec": 8244.2
       }
     ]
   }

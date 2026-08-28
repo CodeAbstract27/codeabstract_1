@@ -1,6 +1,6 @@
 # CodeAbstract — Evaluation Report
 
-> Generated: 2026-08-26 15:48:45  
+> Generated: 2026-08-28 20:01:16  
 > Privacy Level: `high`  
 > Corpus: 10 files | Labeled dataset: 150 nodes
 
@@ -15,7 +15,7 @@
 | Classification Macro-F1 | 0.8937 | ≥ 0.85 | ✅ |
 | AST Isomorphism Score | 1.0000 | 1.00 | ✅ |
 | Syntax Validity Rate | 100.0% | 100% | ✅ |
-| Throughput (LOC/sec) | 4,712 | ≥ 1,000 | ✅ |
+| Throughput (LOC/sec) | 6,366 | ≥ 1,000 | ✅ |
 
 ---
 
@@ -100,29 +100,29 @@
 
 ## Pillar 5 — Performance
 
-**Mean Throughput**: 4,712 LOC/sec  
-**Mean Abstraction Time**: 8.8 ms  
-**Mean Encryption Round-trip**: 1.6 ms
+**Mean Throughput**: 6,366 LOC/sec  
+**Mean Abstraction Time**: 6.9 ms  
+**Mean Encryption Round-trip**: 1.9 ms
 
 | File | LOC | Abstract (ms) | Reconstruct (ms) | Throughput (LOC/s) |
 |------|-----|--------------|-----------------|-------------------|
-| api_client | 42 | 10.2 | 1.1 | 4,133 |
-| ecommerce_pricing | 39 | 10.3 | 0.9 | 3,788 |
-| ml_pipeline | 48 | 16.1 | 0.8 | 2,985 |
-| web_server_config | 31 | 6.2 | 0.5 | 5,024 |
-| simple_utility | 41 | 9.7 | 0.8 | 4,223 |
-| auth_service | 42 | 8.4 | 0.7 | 4,990 |
-| financial_calculator | 33 | 6.6 | 0.8 | 4,994 |
-| database_layer | 41 | 6.6 | 0.5 | 6,207 |
-| microservice_router | 36 | 6.6 | 1.1 | 5,484 |
-| analytics_engine | 37 | 7.0 | 0.7 | 5,291 |
+| api_client | 42 | 6.4 | 0.7 | 6,553 |
+| ecommerce_pricing | 39 | 6.9 | 0.7 | 5,623 |
+| ml_pipeline | 48 | 8.8 | 0.7 | 5,436 |
+| web_server_config | 31 | 6.1 | 0.7 | 5,073 |
+| simple_utility | 41 | 15.5 | 0.8 | 2,648 |
+| auth_service | 42 | 6.4 | 0.6 | 6,575 |
+| financial_calculator | 33 | 4.0 | 0.4 | 8,310 |
+| database_layer | 41 | 5.8 | 0.5 | 7,031 |
+| microservice_router | 36 | 4.4 | 0.5 | 8,165 |
+| analytics_engine | 37 | 4.5 | 0.6 | 8,244 |
 
 ### Scaling Curve
 
 | LOC | Abstraction Time (ms) | Throughput (LOC/s) |
 |-----|----------------------|-------------------|
-| 39 | 14.9 | 2,609 |
-| 78 | 16.2 | 4,809 |
-| 117 | 18.4 | 6,344 |
-| 195 | 39.9 | 4,883 |
-| 312 | 44.6 | 6,998 |
+| 39 | 5.2 | 7,441 |
+| 78 | 9.0 | 8,630 |
+| 117 | 16.7 | 7,000 |
+| 195 | 32.4 | 6,017 |
+| 312 | 41.7 | 7,475 |

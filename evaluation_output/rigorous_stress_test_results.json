@@ -1,0 +1,64 @@
+{
+  "test_type": "Rigorous Edge-Case Stress Test",
+  "total_tasks": 17,
+  "ast_isomorphism_rate": 100.0,
+  "test_harness_pass_rate": 100.0,
+  "reconstruction_fidelity": 100.0,
+  "normalized_edit_distance": 36.85359806958889,
+  "mean_latency_ms": 4.447382361189845,
+  "p95_latency_ms": 43.0384999490343,
+  "category_breakdown": {
+    "CAT_2_EXTREME_NUMERICS": {
+      "count": 5,
+      "ast": 5,
+      "exec": 5,
+      "ed": [
+        44.927536231884055,
+        30.252100840336134,
+        51.06382978723404,
+        41.7910447761194,
+        52.72727272727272
+      ]
+    },
+    "CAT_3_EMPTY_NULL_BOUNDARIES": {
+      "count": 3,
+      "ast": 3,
+      "exec": 3,
+      "ed": [
+        36.81592039800995,
+        45.16129032258064,
+        25.94142259414226
+      ]
+    },
+    "CAT_1_NESTED_SCOPES": {
+      "count": 4,
+      "ast": 4,
+      "exec": 4,
+      "ed": [
+        39.18269230769231,
+        21.67487684729064,
+        21.44469525959368,
+        33.66583541147132
+      ]
+    },
+    "CAT_4_COMPLEX_DATASTRUCTURES": {
+      "count": 3,
+      "ast": 3,
+      "exec": 3,
+      "ed": [
+        35.30280649926144,
+        21.962616822429908,
+        35.39156626506024
+      ]
+    },
+    "CAT_5_DEEP_RECURSION_CONTROL": {
+      "count": 2,
+      "ast": 2,
+      "exec": 2,
+      "ed": [
+        51.26353790613718,
+        37.942122186495176
+      ]
+    }
+  }
+}
