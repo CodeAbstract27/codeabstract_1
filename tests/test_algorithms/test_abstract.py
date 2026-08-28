@@ -358,3 +358,27 @@ def process(data):
         assert "process" in result.abstract_code
         # 'commission_rate' is a VALUE → SHOULD be abstracted
         assert "commission_rate" not in result.abstract_code
+
+    def test_multi_occurrence_tracking(self):
+        """Mapping table should record all line & col occurrences for reused tokens."""
+        source = '''
+def process_data(user_id):
+    print(user_id)
+    return user_id
+'''
+        result = abstract(source, privacy_level="high")
+        mapping = _decrypt_mapping(result)
+        user_id_entry = next(e for e in mapping.values() if e['name'] == 'user_id')
+        assert 'occurrences' in user_id_entry
+        assert len(user_id_entry['occurrences']) >= 2
+        for occ in user_id_entry['occurrences']:
+            assert 'lineno' in occ
+            assert 'col_offset' in occ
+
+    def test_mock_preamble_generation(self):
+        """generate_mock_preamble creates stub declarations for values."""
+        from algorithms.abstract import generate_mock_preamble
+        result = abstract(SAMPLE_PAYMENT_CODE, privacy_level="high")
+        mapping = _decrypt_mapping(result)
+        preamble = generate_mock_preamble(mapping)
+        assert "None" in preamble

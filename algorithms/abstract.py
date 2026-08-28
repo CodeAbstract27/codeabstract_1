@@ -145,10 +145,17 @@ def abstract(
         elif label == 'VALUE':
             stats['values_found'] += 1
 
-        # Step 8: Token generation (with reuse)
+        # Extract location info
+        lineno = getattr(node, 'lineno', 1)
+        col_offset = getattr(node, 'col_offset', 0)
+        occ = {'lineno': lineno, 'col_offset': col_offset}
+
+        # Step 8: Token generation (with reuse & multi-occurrence tracking)
         if node_name in seen:
             # Reuse existing token for consistency
             token = seen[node_name]
+            if token in mapping_table and 'occurrences' in mapping_table[token]:
+                mapping_table[token]['occurrences'].append(occ)
         else:
             # Determine effective node type for prefix selection.
             # If this Attribute is the func of a Call, treat as method → FUNC.
@@ -163,7 +170,6 @@ def abstract(
             token = token_gen.generate(prefix)
 
             # Extract context (need lineno)
-            lineno = getattr(node, 'lineno', 1)
             ctx = get_context(source_code, lineno, context_window)
 
             # Store in mapping table
@@ -172,7 +178,9 @@ def abstract(
                 'label': label,
                 'node_type': type(node).__name__,
                 'lineno': lineno,
+                'col_offset': col_offset,
                 'ctx': ctx,
+                'occurrences': [occ],
             }
 
             # Cache token for reuse
@@ -306,3 +314,17 @@ def _should_abstract(label: str, privacy_level: str) -> bool:
     else:
         # Default to medium behaviour
         return label in ('SECRET', 'VALUE')
+
+
+def generate_mock_preamble(mapping_table: Dict[str, Dict]) -> str:
+    """
+    Generate mock stub declarations for abstracted constants/values to prevent
+    NameError or undefined identifier warnings when abstract code is parsed/linted.
+    """
+    preamble_lines = []
+    for token, meta in mapping_table.items():
+        label = meta.get('label')
+        node_type = meta.get('node_type')
+        if label in ('VALUE', 'SECRET') or node_type == 'Constant':
+            preamble_lines.append(f"{token} = None  # Mock Value/Secret")
+    return "\n".join(preamble_lines)

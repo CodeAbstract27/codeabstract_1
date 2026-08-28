@@ -7,10 +7,11 @@ Implements helper functions from formal specification:
 """
 
 import ast
+import keyword
 from typing import Optional, Set
 
 # ═══════════════════════════════════════════════════════════
-# Python builtins that should NOT be abstracted
+# Python builtins and keywords that should NOT be abstracted
 # ═══════════════════════════════════════════════════════════
 
 BUILTINS: Set[str] = {
@@ -43,7 +44,7 @@ BUILTINS: Set[str] = {
     'NameError', 'UnboundLocalError',
     'ZeroDivisionError', 'OverflowError',
     'AssertionError', 'NotImplementedError',
-}
+}.union(set(keyword.kwlist))
 
 
 def is_semantically_significant(node: ast.AST) -> bool:

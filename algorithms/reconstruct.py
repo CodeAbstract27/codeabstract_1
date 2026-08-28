@@ -154,6 +154,7 @@ def reconstruct_structured(
                 'type': type_label,
                 'prefix': prefix,
                 'ctx': entry.get('ctx', {}),
+                'occurrences': entry.get('occurrences', [{'lineno': lineno, 'col_offset': entry.get('col_offset', 0)}]),
             })
 
     return ReconstructResult(
