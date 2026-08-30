@@ -83,8 +83,10 @@ def abstract(
     # Step 4: Statistics tracking
     stats = {
         'total_nodes': 0,
+        'semantic_nodes': 0,
         'abstracted_nodes': 0,
         'skipped_nodes': 0,
+        'intentionally_preserved': 0,
         'secrets_found': 0,
         'values_found': 0,
     }
@@ -115,14 +117,53 @@ def abstract(
     for node in ast.walk(ast_tree):
         stats['total_nodes'] += 1
 
+        is_semantic_carrier = isinstance(node, (
+            ast.Name, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+            ast.arg, ast.Attribute, ast.Constant, ast.keyword, ast.alias,
+            ast.ExceptHandler, ast.Global, ast.Nonlocal
+        ))
+        if is_semantic_carrier:
+            stats['semantic_nodes'] += 1
+
         # Skip nodes inside f-strings (prevents f-string corruption)
         if id(node) in fstring_children:
             stats['skipped_nodes'] += 1
             continue
 
+        # Handle Global / Nonlocal statements
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            new_names = []
+            for g_name in node.names:
+                if is_semantically_significant(ast.Name(id=g_name, ctx=ast.Load())):
+                    if g_name in seen:
+                        new_names.append(seen[g_name])
+                    else:
+                        token = token_gen.generate('VAR')
+                        lineno = getattr(node, 'lineno', 1)
+                        col_offset = getattr(node, 'col_offset', 0)
+                        mapping_table[token] = {
+                            'name': g_name,
+                            'label': 'IDENTIFIER',
+                            'node_type': type(node).__name__,
+                            'lineno': lineno,
+                            'col_offset': col_offset,
+                            'ctx': get_context(source_code, lineno, context_window),
+                            'occurrences': [{'lineno': lineno, 'col_offset': col_offset}],
+                        }
+                        seen[g_name] = token
+                        new_names.append(token)
+                    stats['abstracted_nodes'] += 1
+                else:
+                    new_names.append(g_name)
+            node.names = new_names
+            continue
+
         # Step 6: Skip non-significant nodes
         if not is_semantically_significant(node):
             stats['skipped_nodes'] += 1
+            # Track intentionally preserved semantic carriers (builtins, single-char, dunders)
+            if is_semantic_carrier:
+                stats['intentionally_preserved'] += 1
             continue
 
         # Extract node name
@@ -230,6 +271,16 @@ def _get_node_name(node: ast.AST) -> Optional[str]:
         return node.arg
     elif isinstance(node, ast.Attribute):
         return node.attr
+    elif isinstance(node, ast.keyword) and node.arg:
+        return node.arg
+    elif isinstance(node, ast.alias):
+        return node.asname or node.name.split('.')[-1]
+    elif isinstance(node, ast.ExceptHandler) and node.name:
+        return node.name
+    elif hasattr(ast, 'MatchAs') and isinstance(node, ast.MatchAs) and node.name:
+        return node.name
+    elif hasattr(ast, 'MatchStar') and isinstance(node, ast.MatchStar) and node.name:
+        return node.name
     elif isinstance(node, ast.Constant):
         return str(node.value)
     return None
@@ -257,6 +308,16 @@ def _replace_node_name(
         node.arg = token
     elif isinstance(node, ast.Attribute):
         node.attr = token
+    elif isinstance(node, ast.keyword):
+        node.arg = token
+    elif isinstance(node, ast.alias):
+        node.asname = token
+    elif isinstance(node, ast.ExceptHandler):
+        node.name = token
+    elif hasattr(ast, 'MatchAs') and isinstance(node, ast.MatchAs):
+        node.name = token
+    elif hasattr(ast, 'MatchStar') and isinstance(node, ast.MatchStar):
+        node.name = token
     elif isinstance(node, ast.Constant):
         # Swap Constant → Name so unparse doesn't add quotes
         replacement = ast.Name(id=token, ctx=ast.Load())

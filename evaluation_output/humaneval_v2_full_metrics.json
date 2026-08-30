@@ -1,0 +1,1499 @@
+{
+  "benchmark": "OpenAI HumanEval (Full v2)",
+  "dataset_file": "human_eval_v2.json",
+  "total_tasks": 164,
+  "privacy_level": "high",
+  "total_duration_sec": 9.41,
+  "metrics": {
+    "ast_syntactic_validity_pct": 100.0,
+    "reconstruction_fidelity_pct": 100.0,
+    "canonical_test_suite_pass_rate_pct": 100.0,
+    "effective_sir_pct": 100.0,
+    "semantic_information_ratio_pct": 61.11,
+    "privacy_information_ratio_pct": 22.77,
+    "zero_leakage_rate_pct": 83.54,
+    "normalized_edit_distance_pct": 76.76,
+    "mean_latency_ms": 2.23,
+    "p50_latency_ms": 1.83,
+    "p95_latency_ms": 4.55,
+    "p99_latency_ms": 6.97
+  },
+  "tasks": [
+    {
+      "task_id": "HumanEval/0",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 60.33,
+      "latency_ms": 15.3,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/1",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 71.14,
+      "latency_ms": 2.32,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/2",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 86.76,
+      "latency_ms": 2.01,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/3",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 76.68,
+      "latency_ms": 1.63,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/4",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 77.97,
+      "latency_ms": 1.51,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/5",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 68.27,
+      "latency_ms": 1.67,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/6",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 65.8,
+      "latency_ms": 1.83,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/7",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 76.84,
+      "latency_ms": 1.46,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/8",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 73.05,
+      "latency_ms": 2.77,
+      "leaked_identifiers": 2
+    },
+    {
+      "task_id": "HumanEval/9",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 63.05,
+      "latency_ms": 1.37,
+      "leaked_identifiers": 2
+    },
+    {
+      "task_id": "HumanEval/10",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 79.37,
+      "latency_ms": 2.23,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/11",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 57.56,
+      "latency_ms": 1.27,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/12",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 65.91,
+      "latency_ms": 1.5,
+      "leaked_identifiers": 2
+    },
+    {
+      "task_id": "HumanEval/13",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 68.91,
+      "latency_ms": 0.8,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/14",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 66.56,
+      "latency_ms": 1.16,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/15",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 74.54,
+      "latency_ms": 0.84,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/16",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 83.22,
+      "latency_ms": 0.92,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/17",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 83.23,
+      "latency_ms": 2.12,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/18",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 71.12,
+      "latency_ms": 1.54,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/19",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 78.55,
+      "latency_ms": 4.48,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/20",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 57.5,
+      "latency_ms": 3.62,
+      "leaked_identifiers": 2
+    },
+    {
+      "task_id": "HumanEval/21",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 75.05,
+      "latency_ms": 1.5,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/22",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 68.63,
+      "latency_ms": 1.63,
+      "leaked_identifiers": 2
+    },
+    {
+      "task_id": "HumanEval/23",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 73.08,
+      "latency_ms": 0.48,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/24",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 59.84,
+      "latency_ms": 0.84,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/25",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 67.54,
+      "latency_ms": 1.94,
+      "leaked_identifiers": 2
+    },
+    {
+      "task_id": "HumanEval/26",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 70.51,
+      "latency_ms": 1.33,
+      "leaked_identifiers": 2
+    },
+    {
+      "task_id": "HumanEval/27",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 80.29,
+      "latency_ms": 1.23,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/28",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 74.27,
+      "latency_ms": 1.02,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/29",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 76.63,
+      "latency_ms": 1.14,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/30",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 80.38,
+      "latency_ms": 0.76,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/31",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 70.78,
+      "latency_ms": 1.03,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/32",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 74.84,
+      "latency_ms": 3.41,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/33",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 85.92,
+      "latency_ms": 3.06,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/34",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 71.27,
+      "latency_ms": 0.93,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/35",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 63.5,
+      "latency_ms": 1.08,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/36",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 63.19,
+      "latency_ms": 1.62,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/37",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 74.73,
+      "latency_ms": 1.91,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/38",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 72.62,
+      "latency_ms": 2.06,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/39",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 51.18,
+      "latency_ms": 2.35,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/40",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 69.29,
+      "latency_ms": 1.63,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/41",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 94.72,
+      "latency_ms": 1.8,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/42",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 80.33,
+      "latency_ms": 0.82,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/43",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 75.99,
+      "latency_ms": 1.3,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/44",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 76.13,
+      "latency_ms": 1.26,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/45",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 77.02,
+      "latency_ms": 0.68,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/46",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 82.69,
+      "latency_ms": 2.25,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/47",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 58.9,
+      "latency_ms": 1.18,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/48",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 68.87,
+      "latency_ms": 1.11,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/49",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 73.18,
+      "latency_ms": 0.91,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/50",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 71.33,
+      "latency_ms": 3.1,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/51",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 87.77,
+      "latency_ms": 1.35,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/52",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 64.45,
+      "latency_ms": 0.71,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/53",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 69.7,
+      "latency_ms": 0.52,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/54",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 89.37,
+      "latency_ms": 1.0,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/55",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 65.07,
+      "latency_ms": 1.13,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/56",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 71.59,
+      "latency_ms": 1.36,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/57",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 68.36,
+      "latency_ms": 1.04,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/58",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 70.43,
+      "latency_ms": 1.22,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/59",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 51.34,
+      "latency_ms": 1.61,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/60",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 82.89,
+      "latency_ms": 0.76,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/61",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 71.59,
+      "latency_ms": 1.36,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/62",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 83.09,
+      "latency_ms": 0.97,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/63",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 77.93,
+      "latency_ms": 3.13,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/64",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 83.42,
+      "latency_ms": 1.79,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/65",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 70.62,
+      "latency_ms": 1.39,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/66",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 82.56,
+      "latency_ms": 1.55,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/67",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 87.51,
+      "latency_ms": 2.04,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/68",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 89.83,
+      "latency_ms": 4.31,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/69",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 80.65,
+      "latency_ms": 2.11,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/70",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 81.13,
+      "latency_ms": 2.08,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/71",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 72.07,
+      "latency_ms": 1.84,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/72",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 81.32,
+      "latency_ms": 3.55,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/73",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 83.81,
+      "latency_ms": 1.98,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/74",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 82.54,
+      "latency_ms": 2.94,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/75",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 59.25,
+      "latency_ms": 1.75,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/76",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 80.86,
+      "latency_ms": 1.4,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/77",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 85.04,
+      "latency_ms": 1.21,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/78",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 89.6,
+      "latency_ms": 2.79,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/79",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 93.36,
+      "latency_ms": 1.72,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/80",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 72.92,
+      "latency_ms": 2.07,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/81",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 76.41,
+      "latency_ms": 6.97,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/82",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 68.02,
+      "latency_ms": 1.52,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/83",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 74.09,
+      "latency_ms": 1.48,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/84",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 89.02,
+      "latency_ms": 1.59,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/85",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 80.83,
+      "latency_ms": 1.68,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/86",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 88.4,
+      "latency_ms": 1.25,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/87",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 84.81,
+      "latency_ms": 2.88,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/88",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 89.42,
+      "latency_ms": 3.89,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/89",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 79.97,
+      "latency_ms": 1.69,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/90",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 84.95,
+      "latency_ms": 1.25,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/91",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 85.95,
+      "latency_ms": 1.42,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/92",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 68.66,
+      "latency_ms": 1.33,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/93",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 79.97,
+      "latency_ms": 1.94,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/94",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 75.26,
+      "latency_ms": 2.82,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/95",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 63.43,
+      "latency_ms": 2.04,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/96",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 68.74,
+      "latency_ms": 1.6,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/97",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 87.73,
+      "latency_ms": 1.02,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/98",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 73.6,
+      "latency_ms": 1.13,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/99",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 77.12,
+      "latency_ms": 3.0,
+      "leaked_identifiers": 2
+    },
+    {
+      "task_id": "HumanEval/100",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 89.49,
+      "latency_ms": 1.27,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/101",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 74.92,
+      "latency_ms": 1.45,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/102",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 72.35,
+      "latency_ms": 1.3,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/103",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 78.33,
+      "latency_ms": 1.58,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/104",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 76.32,
+      "latency_ms": 1.95,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/105",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 84.33,
+      "latency_ms": 3.15,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/106",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 65.24,
+      "latency_ms": 2.17,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/107",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 81.86,
+      "latency_ms": 2.81,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/108",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 68.03,
+      "latency_ms": 2.11,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/109",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 87.8,
+      "latency_ms": 3.75,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/110",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 81.71,
+      "latency_ms": 2.18,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/111",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 76.82,
+      "latency_ms": 1.72,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/112",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 89.13,
+      "latency_ms": 2.05,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/113",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 83.98,
+      "latency_ms": 2.41,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/114",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 64.71,
+      "latency_ms": 1.73,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/115",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 93.8,
+      "latency_ms": 2.34,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/116",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 89.43,
+      "latency_ms": 1.5,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/117",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 82.13,
+      "latency_ms": 2.83,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/118",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 79.26,
+      "latency_ms": 3.05,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/119",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 75.95,
+      "latency_ms": 2.92,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/120",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 88.92,
+      "latency_ms": 1.62,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/121",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 80.83,
+      "latency_ms": 1.29,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/122",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 87.22,
+      "latency_ms": 1.27,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/123",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 81.48,
+      "latency_ms": 3.26,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/124",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 75.48,
+      "latency_ms": 4.78,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/125",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 79.44,
+      "latency_ms": 2.65,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/126",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 77.17,
+      "latency_ms": 3.26,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/127",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 78.01,
+      "latency_ms": 3.89,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/128",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 73.98,
+      "latency_ms": 1.67,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/129",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 76.87,
+      "latency_ms": 5.26,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/130",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 81.72,
+      "latency_ms": 6.57,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/131",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 66.03,
+      "latency_ms": 2.08,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/132",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 74.16,
+      "latency_ms": 4.55,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/133",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 86.69,
+      "latency_ms": 1.95,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/134",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 86.81,
+      "latency_ms": 2.16,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/135",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 78.85,
+      "latency_ms": 1.99,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/136",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 78.86,
+      "latency_ms": 2.36,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/137",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 74.41,
+      "latency_ms": 2.7,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/138",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 86.1,
+      "latency_ms": 1.28,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/139",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 78.23,
+      "latency_ms": 1.62,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/140",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 66.08,
+      "latency_ms": 5.72,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/141",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 80.62,
+      "latency_ms": 5.31,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/142",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 80.09,
+      "latency_ms": 3.77,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/143",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 78.44,
+      "latency_ms": 2.56,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/144",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 81.05,
+      "latency_ms": 3.08,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/145",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 73.58,
+      "latency_ms": 3.73,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/146",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 73.89,
+      "latency_ms": 2.77,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/147",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 69.95,
+      "latency_ms": 3.38,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/148",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 84.21,
+      "latency_ms": 4.2,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/149",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 88.56,
+      "latency_ms": 3.88,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/150",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 60.0,
+      "latency_ms": 1.32,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/151",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 84.99,
+      "latency_ms": 1.81,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/152",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 93.83,
+      "latency_ms": 2.43,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/153",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 81.01,
+      "latency_ms": 6.12,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/154",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 71.11,
+      "latency_ms": 3.34,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/155",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 68.92,
+      "latency_ms": 1.73,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/156",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 72.55,
+      "latency_ms": 3.44,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/157",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 81.82,
+      "latency_ms": 2.38,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/158",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 87.69,
+      "latency_ms": 2.74,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/159",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 91.93,
+      "latency_ms": 2.5,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/160",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 90.53,
+      "latency_ms": 2.89,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/161",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 67.5,
+      "latency_ms": 2.18,
+      "leaked_identifiers": 0
+    },
+    {
+      "task_id": "HumanEval/162",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 81.23,
+      "latency_ms": 2.06,
+      "leaked_identifiers": 1
+    },
+    {
+      "task_id": "HumanEval/163",
+      "ast_valid": true,
+      "recon_ok": true,
+      "unit_test_passed": true,
+      "edit_dist_pct": 77.05,
+      "latency_ms": 1.47,
+      "leaked_identifiers": 0
+    }
+  ]
+}

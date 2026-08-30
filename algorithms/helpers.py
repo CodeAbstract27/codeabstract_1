@@ -82,6 +82,10 @@ def is_semantically_significant(node: ast.AST) -> bool:
     if name.startswith('__') and name.endswith('__'):
         return False
 
+    # Rule 4: Skip pure whitespace or empty string constants
+    if isinstance(node, ast.Constant) and isinstance(node.value, str) and not node.value.strip():
+        return False
+
     # All checks passed — semantically significant
     return True
 
@@ -100,6 +104,10 @@ def _extract_name(node: ast.AST) -> Optional[str]:
         return node.attr
     elif isinstance(node, ast.keyword) and node.arg:
         return node.arg
+    elif isinstance(node, ast.alias):
+        return node.asname or node.name.split('.')[-1]
+    elif isinstance(node, ast.ExceptHandler) and node.name:
+        return node.name
     elif hasattr(ast, 'MatchAs') and isinstance(node, ast.MatchAs) and node.name:
         return node.name
     elif hasattr(ast, 'MatchStar') and isinstance(node, ast.MatchStar) and node.name:
