@@ -3,11 +3,11 @@
   "total_tasks": 15,
   "pass@1": 100.0,
   "compilation_rate": 100.0,
-  "normalized_edit_distance": 34.5549557825132,
+  "normalized_edit_distance": 35.83412913227682,
   "eccc_functional": 10.0,
   "eccc_privacy": 7.6,
   "eccc_cleanliness": 10.0,
   "reconstruction_fidelity": 100.0,
-  "mean_latency_ms": 3.698719999132057,
-  "throughput_loc_s": 2126.8619058789695
+  "mean_latency_ms": 2.191779999217639,
+  "throughput_loc_s": 3589.168013885833
 }

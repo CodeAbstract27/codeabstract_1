@@ -1,0 +1,30 @@
+{
+  "dataset": "CodeSearchNet",
+  "dataset_file": "codesearchnet_pair.json",
+  "evaluated_samples": 10000,
+  "total_loc": 164337,
+  "total_bytes": 6196457,
+  "privacy_level": "high",
+  "total_duration_sec": 299.73,
+  "metrics": {
+    "ast_syntactic_validity_pct": 100.0,
+    "effective_sir_pct": 99.92,
+    "semantic_information_ratio_pct": 78.48,
+    "privacy_information_ratio_pct": 32.01,
+    "zero_leakage_rate_pct": 96.76,
+    "reconstruction_fidelity_pct": 100.0,
+    "token_hit_rate_pct": 100.0,
+    "normalized_edit_distance_pct": 68.88,
+    "normalized_edit_distance_ast_pct": 61.58,
+    "cyclomatic_complexity_delta": 0.0,
+    "mean_latency_ms": 16.16,
+    "p50_latency_ms": 8.77,
+    "p95_latency_ms": 51.77,
+    "p99_latency_ms": 112.66,
+    "throughput_loc_sec": 548.3,
+    "throughput_kb_sec": 20.2,
+    "eccc_rubric_functional": 10.0,
+    "eccc_rubric_privacy": 9.85,
+    "eccc_rubric_cleanliness": 10.0
+  }
+}
