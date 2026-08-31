@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — CodeAbstract{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+
+  <section class="stat-grid">
+    <div class="stat-card">
+      <dt>Sessions run</dt>
+      <dd>{{ stats.total_sessions }}</dd>
+    </div>
+    <div class="stat-card">
+      <dt>Secrets protected</dt>
+      <dd class="accent-secret">{{ stats.total_secrets_found }}</dd>
+    </div>
+    <div class="stat-card">
+      <dt>Business values protected</dt>
+      <dd class="accent-value">{{ stats.total_values_found }}</dd>
+    </div>
+    <div class="stat-card">
+      <dt>Symbols abstracted</dt>
+      <dd>{{ stats.total_abstractions }}</dd>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Activity, last {{ stats.activity|length }} days</h2>
+      <p class="pane-note">Sessions abstracted per day, this account only.</p>
+    </div>
+
+    {% set max_sessions = (stats.activity|map(attribute='sessions')|max) or 1 %}
+    <div class="bar-chart" role="img"
+         aria-label="Sessions per day over the last {{ stats.activity|length }} days">
+      {% for day in stats.activity %}
+      <div class="bar-col" title="{{ day.date }}: {{ day.sessions }} session(s), {{ day.secrets }} secret(s) found">
+        <div class="bar-track">
+          <div class="bar-fill {{ pct_class(day.sessions, max_sessions, 'h') }}"></div>
+        </div>
+        <span class="bar-label">{{ day.date[5:] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <details class="table-fallback">
+      <summary>View as a table</summary>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Date</th><th class="num">Sessions</th><th class="num">Secrets found</th></tr></thead>
+          <tbody>
+            {% for day in stats.activity %}
+            <tr><td>{{ day.date }}</td><td class="num">{{ day.sessions }}</td><td class="num">{{ day.secrets }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Language mix</h2>
+      <p class="pane-note">Which language adapter your sessions used.</p>
+    </div>
+
+    {% if stats.language_breakdown %}
+    {% set max_lang = stats.language_breakdown[0].count %}
+    <div class="hbar-chart">
+      {% for row in stats.language_breakdown %}
+      <div class="hbar-row">
+        <span class="hbar-label">{{ row.language }}</span>
+        <div class="hbar-track">
+          <div class="hbar-fill lang-{{ loop.index0 % 4 }} {{ pct_class(row.count, max_lang, 'w') }}"></div>
+        </div>
+        <span class="hbar-value">{{ row.count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty">No sessions yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Recent sessions</h2>
+      <a class="head-actions link-button" href="{{ url_for('ui.sessions_page') }}">View all</a>
+    </div>
+    {% if stats.recent_sessions %}
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr><th>Session</th><th>Source</th><th>Language</th><th>Created</th>
+              <th class="num">Abstracted</th><th class="num">Secrets</th></tr>
+        </thead>
+        <tbody>
+          {% for session in stats.recent_sessions %}
+          <tr>
+            <td><code>{{ session.short_id }}</code></td>
+            <td>{{ session.source_file }}</td>
+            <td>{{ session.language }}</td>
+            <td>{{ session.created_at }}</td>
+            <td class="num">{{ session.statistics.get('abstracted_nodes', 0) }}</td>
+            <td class="num">{{ session.statistics.get('secrets_found', 0) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty">
+      No sessions yet. Abstract something on the
+      <a href="{{ url_for('ui.index') }}">workbench</a> to see it here.
+    </p>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}

@@ -20,10 +20,30 @@ the vault and the source of anyone who used it — see the ``web`` command in
 ``cli.py``, which requires an explicit acknowledgement to bind elsewhere.
 """
 
+import os
+import stat
 from typing import Any, Dict, Optional
+
+
+def pct_class(value: float, maximum: float, axis: str = 'h') -> str:
+    """
+    CSS class name for a bar's height/width, snapped to the nearest 5%
+    step defined in app.css's ``.pct-h-N`` / ``.pct-w-N`` rules.
+
+    A Jinja global rather than a template writing ``style="height: N%"``
+    directly: the CSP's ``style-src 'self'`` (below) blocks inline style
+    attributes outright, which is exactly what flattened every dashboard
+    bar to 0% height until a real-browser check caught it. Percentages are
+    bucketed to fixed classes instead, so nothing here is ever an inline
+    style.
+    """
+    pct = (value / maximum * 100) if maximum else 0
+    bucket = min(100, max(0, round(pct / 5) * 5))
+    return f'pct-{axis}-{int(bucket)}'
 
 from flask import Flask
 
+from config.settings import get_flask_secret_key_path
 from web.service import WebServiceError
 
 # Flask rejects a body larger than this before the route sees it, so a
@@ -57,6 +77,33 @@ SECURITY_HEADERS = {
 }
 
 
+def _load_or_create_secret_key() -> bytes:
+    """
+    The key that signs the login-session cookie.
+
+    Generated once and written to ``~/.codeabstract/flask_secret.key`` with
+    owner-only permissions where the platform honours them (see
+    ``storage/key_store.py`` for the same pattern applied to Fernet keys).
+    A key regenerated on every process start would sign every existing
+    visitor out each time the server restarts, which defeats the point of
+    a persistent login.
+    """
+    path = get_flask_secret_key_path()
+    if path.is_file():
+        existing = path.read_bytes()
+        if existing:
+            return existing
+
+    key = os.urandom(32)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(key)
+    try:
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # 0600
+    except OSError:
+        pass  # best effort; Windows inherits ACLs instead
+    return key
+
+
 def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
     """
     Build the application.
@@ -74,6 +121,10 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
                 A pre-built client for ``/api/review``, bypassing provider
                 resolution. This is the seam the tests drive the review
                 pipeline through without a key or a network call.
+            ``SECRET_KEY`` (default: loaded from disk, generated on first
+                use)
+                Overridden by the test suite with a fixed value, so tests
+                do not each write their own key file.
 
     Returns:
         A configured :class:`flask.Flask` app.
@@ -86,14 +137,39 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
         SAVE_SESSIONS=True,
         ALLOW_REVEAL=False,
         LLM_CLIENT=None,
+        SECRET_KEY=_load_or_create_secret_key(),
+        # The login cookie is read by this app alone: not by any script
+        # (HttpOnly), and not sent along on a cross-site navigation or
+        # form post to it (SameSite=Lax covers top-level GET navigation,
+        # which is the one case Lax still allows).
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE='Lax',
     )
     if config:
         app.config.update(config)
 
+    from web.auth import auth_api, auth_ui
     from web.routes import api, error_response, ui
 
     app.register_blueprint(ui)
     app.register_blueprint(api)
+    app.register_blueprint(auth_ui)
+    app.register_blueprint(auth_api)
+
+    app.jinja_env.globals['pct_class'] = pct_class
+
+    @app.context_processor
+    def _inject_auth_context():
+        # Every template needs to know whether to render "Dashboard /
+        # Insights / user@example.com · Log out" or "Sign in / Sign up" in
+        # the nav — computed once here instead of every route handler
+        # passing the same two values into render_template.
+        from web.auth import current_user_email, current_user_id
+
+        return {
+            'current_user_email': current_user_email(),
+            'is_authenticated': current_user_id() is not None,
+        }
 
     # ── Errors ───────────────────────────────────────────
     # One shape for every failure: JSON under /api, a page elsewhere.

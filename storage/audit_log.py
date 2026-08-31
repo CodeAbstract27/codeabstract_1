@@ -153,6 +153,7 @@ def record_abstraction(
     statistics: Dict[str, Any],
     language: str = "python",
     path: Optional[Path] = None,
+    user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Log an abstraction, whether or not anything is later sent anywhere.
@@ -160,6 +161,13 @@ def record_abstraction(
     Abstracting is the moment the detector made its decisions, so it is the
     moment worth recording: a run that never reached a provider still
     produced a privacy report someone may need to account for.
+
+    Args:
+        user_id: The web account this abstraction belongs to, if any. Only
+            ever set by web/service.py -- the CLI has no such concept, and
+            its entries carry no owner (see web.service.audit_overview,
+            which is what filters by this field; ``codeabstract audit
+            list`` reads every entry regardless of it).
     """
     return append_entry(
         'abstract',
@@ -168,6 +176,7 @@ def record_abstraction(
         source_file=str(source_file),
         language=language,
         privacy_level=privacy_level,
+        user_id=user_id,
         counts={
             'abstracted': statistics.get('abstracted_nodes', 0),
             'secrets': statistics.get('secrets_found', 0),
@@ -191,6 +200,7 @@ def record_request(
     task: Optional[str] = None,
     free_form_query: bool = False,
     path: Optional[Path] = None,
+    user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Log one outbound request to an LLM provider.
@@ -210,6 +220,8 @@ def record_request(
             Recorded because a free-form query is a second thing that left
             the machine, and a reviewer should be able to see that it did.
         path: Log file override.
+        user_id: The web account this request belongs to, if any. See
+            :func:`record_abstraction`.
 
     Returns:
         The written entry.
@@ -226,6 +238,7 @@ def record_request(
         model=model,
         task=task,
         free_form_query=free_form_query,
+        user_id=user_id,
         payload_sha256=payload_sha256,
         success=bool(getattr(response, 'success', False)) if response else None,
         error=getattr(response, 'error', None) if response else None,

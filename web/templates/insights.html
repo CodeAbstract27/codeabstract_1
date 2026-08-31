@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Insights — CodeAbstract{% endblock %}
+
+{% block content %}
+<div class="insights-page">
+
+  <div class="tabs" id="insight-tabs" role="tablist">
+    <button type="button" class="tab active" data-tab="audit" role="tab">Audit log</button>
+    <button type="button" class="tab" data-tab="benchmarks" role="tab">Evaluation &amp; benchmarks</button>
+  </div>
+
+  {# ── Audit log ─────────────────────────────────────── #}
+  <section class="tab-body" id="tab-audit" role="tabpanel">
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Chain integrity</h2>
+        <span class="badge {{ 'ok' if audit.chain_ok else 'masked' }}">
+          {{ 'intact' if audit.chain_ok else 'problem detected' }}
+        </span>
+        <form method="get" class="head-actions">
+          <button type="submit" class="link-button">Re-verify</button>
+        </form>
+      </div>
+      <p class="pane-note">
+        {{ audit.chain_summary }} across the whole log at
+        <code class="mono">{{ audit.log_path }}</code> — this check covers every entry on this
+        machine, including the CLI's and other accounts', not just yours below.
+      </p>
+      {% if not audit.chain_ok %}
+      <ul class="checklist">
+        {% for problem in audit.chain_problems %}
+        <li class="alert">{{ problem }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if not audit.logging_enabled %}
+      <p class="status error">Audit logging is turned off in this app's config — new events will not appear here.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Recent entries</h2>
+        <p class="pane-note">
+          {{ audit.total_entries }} from your account. Metadata only — no source, no identifiers,
+          no prompt text. Entries the CLI wrote, or another account made, aren't shown here — see
+          <code class="mono">codeabstract audit list</code> for the whole machine's record.
+        </p>
+      </div>
+      {% if audit.entries %}
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr><th>Seq</th><th>Event</th><th>Time (UTC)</th><th>Session</th>
+                <th>Privacy</th><th>Provider</th><th>Model</th><th>Result</th></tr>
+          </thead>
+          <tbody>
+            {% for entry in audit.entries %}
+            <tr>
+              <td class="num">{{ entry.get('seq', '') }}</td>
+              <td>{{ entry.get('event', '') }}</td>
+              <td>{{ entry.get('timestamp', '') }}</td>
+              <td><code>{{ (entry.get('session_id') or '')[:12] }}</code></td>
+              <td>{{ entry.get('privacy_level') or '—' }}</td>
+              <td>{{ entry.get('provider') or '—' }}</td>
+              <td>{{ entry.get('model') or '—' }}</td>
+              <td>
+                {% if entry.get('event') == 'request' %}
+                  <span class="badge {{ 'ok' if entry.get('success') else 'masked' }}">
+                    {{ 'ok' if entry.get('success') else 'failed' }}
+                  </span>
+                {% else %}
+                  <span class="muted-cell">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty">No audit entries yet.</p>
+      {% endif %}
+    </section>
+  </section>
+
+  {# ── Benchmarks ────────────────────────────────────── #}
+  <section class="tab-body" id="tab-benchmarks" role="tabpanel" hidden>
+
+    {% if benchmarks.available %}
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Evaluation suite</h2>
+        <span class="badge snapshot">static snapshot</span>
+        <button type="button" id="btn-run-benchmarks" class="link-button head-actions">Run now</button>
+      </div>
+      <p class="pane-note">
+        {{ benchmarks.files_evaluated }} files at privacy level
+        <strong>{{ benchmarks.privacy_level }}</strong>, generated
+        <strong>{{ benchmarks.timestamp }}</strong> — nothing on this page reflects code changed
+        since then. "Run now" re-runs everything but the (slow) performance pillar and refreshes
+        this page; <code class="mono">python evaluation/run_eval.py</code> from a terminal produces
+        the full suite, performance pillar included.
+      </p>
+      <p id="benchmarks-run-status" class="status" role="status"></p>
+
+      <dl class="stat-strip">
+        <div><dt>Privacy leakage (PIR)</dt><dd>{{ '%.2f'|format(benchmarks.privacy.mean_pir * 100) }}%</dd></div>
+        <div><dt>Secret leakage rate</dt><dd>{{ '%.2f'|format(benchmarks.privacy.mean_secret_leakage_rate * 100) }}%</dd></div>
+        <div><dt>Round-trip fidelity</dt><dd>{{ '%.1f'|format(benchmarks.reconstruction.mean_roundtrip_fidelity * 100) }}%</dd></div>
+        <div><dt>Classifier accuracy</dt><dd>{{ '%.1f'|format(benchmarks.classification.overall_accuracy * 100) }}%</dd></div>
+        <div><dt>AST isomorphism</dt><dd>{{ '%.1f'|format(benchmarks.structure.mean_ast_isomorphism * 100) }}%</dd></div>
+        <div><dt>Mapping accuracy</dt><dd>{{ '%.1f'|format(benchmarks.mapping.mean_mapping_accuracy * 100) }}%</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Classification — per class</h2>
+        <p class="pane-note">Macro F1 {{ '%.3f'|format(benchmarks.classification.macro_f1) }}</p>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Class</th><th class="num">Precision</th><th class="num">Recall</th>
+                     <th class="num">F1</th><th class="num">Support</th></tr></thead>
+          <tbody>
+            {% for label, metrics in benchmarks.classification.per_class.items() %}
+            <tr>
+              <td><span class="chip tok-{{ label|lower }}">{{ label }}</span></td>
+              <td class="num">{{ '%.3f'|format(metrics.precision) }}</td>
+              <td class="num">{{ '%.3f'|format(metrics.recall) }}</td>
+              <td class="num">{{ '%.3f'|format(metrics.f1) }}</td>
+              <td class="num">{{ metrics.support }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Performance — throughput vs. file size</h2>
+        <p class="pane-note">
+          Mean {{ '%.1f'|format(benchmarks.performance.mean_abstraction_time_ms) }} ms/file,
+          {{ '%.0f'|format(benchmarks.performance.mean_throughput_loc_per_sec) }} LOC/sec average.
+        </p>
+      </div>
+      {% set curve = benchmarks.performance.scaling_curve %}
+      {% if curve %}
+      {% set max_t = (curve|map(attribute='throughput_loc_per_sec')|max) or 1 %}
+      <div class="bar-chart" role="img" aria-label="Throughput in lines of code per second, by file size">
+        {% for point in curve %}
+        <div class="bar-col" title="{{ point.loc }} LOC: {{ '%.0f'|format(point.throughput_loc_per_sec) }} LOC/sec">
+          <div class="bar-track">
+            <div class="bar-fill {{ pct_class(point.throughput_loc_per_sec, max_t, 'h') }}"></div>
+          </div>
+          <span class="bar-label">{{ point.loc }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="pane-note">x-axis: file size in lines of code</p>
+      {% endif %}
+    </section>
+
+    {% else %}
+    <section class="panel">
+      <p class="empty">
+        No evaluation results found yet.
+        <button type="button" id="btn-run-benchmarks" class="link-button">Run the suite now</button>
+        (skips the slow performance pillar), or run
+        <code class="mono">python evaluation/run_eval.py</code>
+        from the project root to generate {{ benchmarks.path }} with every pillar included.
+      </p>
+      <p id="benchmarks-run-status" class="status" role="status"></p>
+    </section>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='insights.js') }}"></script>
+{% endblock %}

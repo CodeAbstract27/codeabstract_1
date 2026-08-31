@@ -133,7 +133,10 @@ def run_audit_export(output: str, format: str = "json"):
             for column in columns:
                 value = entry.get(column, '')
                 text = '' if value is None else str(value)
-                values.append(f'"{text}"' if ',' in text or '"' in text else text)
+                needs_quoting = any(c in text for c in (',', '"', '\n', '\r'))
+                if needs_quoting:
+                    text = f'"{text.replace(chr(34), chr(34) * 2)}"'
+                values.append(text)
             rows.append(",".join(values))
         payload = "\n".join(rows) + "\n"
     else:

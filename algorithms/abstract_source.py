@@ -160,6 +160,14 @@ def abstract_source(
 
     symbols = adapter.symbols(source_code)
 
+    # Split once and pass it through: get_context() re-splits source_code on
+    # every call when it is not given pre-split lines, and this loop calls it
+    # once per mapped symbol -- O(symbols x file size) instead of O(file
+    # size) on a large file. algorithms.abstract already carries this fix
+    # for the Python engine; it did not carry over to this, the language-
+    # adapter path every non-Python language shares.
+    source_lines = source_code.split('\n')
+
     mapping_table: Dict[str, Dict] = {}
     seen: Dict[tuple, str] = {}
     occurrences: Dict[str, List[Dict]] = {}
@@ -250,7 +258,7 @@ def abstract_source(
                 'label': label,
                 'node_type': symbol.kind,
                 'lineno': symbol.lineno,
-                'ctx': get_context(source_code, symbol.lineno, context_window),
+                'ctx': get_context(source_code, symbol.lineno, context_window, lines=source_lines),
                 'scope': symbol.scope,
                 'confidence': decision.confidence,
                 'detector': decision.detector,
@@ -281,7 +289,7 @@ def abstract_source(
 
         if definition_line is not None and definition_line != entry['lineno']:
             entry['lineno'] = definition_line
-            entry['ctx'] = get_context(source_code, definition_line, context_window)
+            entry['ctx'] = get_context(source_code, definition_line, context_window, lines=source_lines)
 
     stats['unique_symbols'] = len(mapping_table)
 

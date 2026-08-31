@@ -7,3 +7,5 @@ __pycache__/
 .coverage
 .coverage.*
 *.egg-info/
+.hypothesis/
+tests/test_web_e2e/_screenshots/

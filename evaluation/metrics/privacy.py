@@ -22,8 +22,9 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from algorithms.abstract import abstract
-from algorithms.classify import classify_node
+from algorithms.classify import classify_with_evidence
 from algorithms.encrypt import decrypt_mapping
+from core.context_features import analyze_context, inherited_secret_labels
 from evaluation.benchmarks.corpus import ALL_FILES
 
 
@@ -65,6 +66,19 @@ def _count_original_labels(source_code: str) -> Dict[str, List[str]]:
     """
     Parse source and collect all node names by their classification label.
 
+    Uses the same context-aware classification production abstraction
+    relies on (``core.context_features.analyze_context`` /
+    ``inherited_secret_labels``, then ``classify_with_evidence``) rather
+    than a bare, context-blind ``classify_node`` call. A bare call cannot
+    see a secret's *value* propagated from a secret-named binding, a
+    credential assembled across an f-string or ``%``-format template, or a
+    value fed into a known credential sink -- exactly the class of signal
+    Phase 0 / D1 and the concatenated-secret fix both added to production.
+    Without this, PIR's ground truth silently excludes such values from
+    "things that must never leak," so it cannot detect a regression in
+    that machinery even though production redacts them correctly today.
+    See docs/PIR_GROUND_TRUTH_DECISION.md for the investigation.
+
     Returns dict: {'SECRET': [...names], 'VALUE': [...names], 'IDENTIFIER': [...names]}
     """
     try:
@@ -75,6 +89,9 @@ def _count_original_labels(source_code: str) -> Dict[str, List[str]]:
     from algorithms.helpers import is_semantically_significant
     from algorithms.helpers import BUILTINS
 
+    context_evidence = analyze_context(tree)
+    inherited_labels = inherited_secret_labels(context_evidence)
+
     labels: Dict[str, List[str]] = {"SECRET": [], "VALUE": [], "IDENTIFIER": []}
 
     for node in ast.walk(tree):
@@ -83,8 +100,10 @@ def _count_original_labels(source_code: str) -> Dict[str, List[str]]:
         name = _get_name(node)
         if not name:
             continue
-        label = classify_node(node)
-        labels[label].append(name)
+        decision = classify_with_evidence(
+            node, inherited_labels.get(id(node)), context_evidence.get(id(node)),
+        )
+        labels[decision.label].append(name)
 
     return labels
 

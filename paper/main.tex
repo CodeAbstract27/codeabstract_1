@@ -1,0 +1,990 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{url}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{CodeAbstract: Privacy-Preserving Semantic Abstraction and\\
+Bidirectional Mapping for Secure LLM Code Consultation}
+
+\author{\IEEEauthorblockN{Mohammed Afrah Usman,
+Namita Naik,
+Madhavi,
+Sowmith Shetty}
+\IEEEauthorblockA{\textit{CodeAbstract Project} \\
+\url{https://github.com/CodeAbstract27/codeabstract_1}}
+}
+
+\maketitle
+
+\begin{abstract}
+Developers increasingly consult large language models (LLMs) about
+proprietary source code, but doing so transmits identifiers, business
+constants, and hard-coded credentials to a third party that may log or
+memorize them. We present CodeAbstract, a command-line and web tool that
+rewrites source into a privacy-optimized intermediate representation before
+transmission and maps the model's response back onto the developer's own
+names and line numbers. The system implements four formal operations:
+syntax-tree abstraction with a scoped symbol table, a five-tier hybrid
+sensitivity classifier that combines vendor credential-format matching,
+per-symbol usage-context analysis, name patterns, and Shannon-entropy
+scoring; collision-safe reconstruction with bidirectional line translation;
+and authenticated encryption of the local mapping store. We evaluate the
+current implementation on a 10-file synthetic corpus with 21 planted
+credentials, a 150-node classification dataset, and a 120-file, 24{,}737-line
+corpus drawn from the Python standard library, and we re-execute every
+metric against the shipping code. Zero of 21 planted credentials survive at
+any of four privacy levels; mapping accuracy is 0.9975 against a 0.85
+target; abstraction preserves abstract-syntax-tree structure exactly
+(isomorphism 1.0) at a throughput of roughly 1{,}400 lines/second. A
+deterministic linkage attack, however, re-identifies every file in the
+real corpus at every privacy level (code privacy entropy $\approx 0.0006$),
+showing that structural preservation---the property that makes the output
+useful to a model---is also a near-perfect fingerprint. We report this as a
+scoped guarantee rather than a general one.
+\end{abstract}
+
+\begin{IEEEkeywords}
+software privacy, large language models, program abstraction, secret
+detection, abstract syntax tree, re-identification, code anonymization
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+Interactive LLMs have become a routine part of software development: they
+are asked to explain unfamiliar functions, locate defects, propose
+refactorings, and review changes. The interaction is convenient precisely
+because it is unstructured---the developer pastes real code and asks a
+real question. That convenience carries a disclosure cost that is easy to
+overlook. The pasted code frequently contains material the organization
+would not deliberately publish: internal service names, pricing and
+commission constants, database topology, vendor SDK imports that reveal
+which third parties a company depends on, and---despite years of tooling
+aimed at preventing it~\cite{meli2019git,sinha2015detecting,gitleaks,trufflehog}---hard-coded
+API keys and passwords. Once transmitted, this text is outside the
+developer's control. Providers log requests, and language models have been
+shown to memorize and regurgitate rare training strings, including
+credentials and personal data~\cite{carlini2021extracting,carlini2023quantifying,yang2024memorization,lukas2023analyzing}.
+Whether a given provider trains on a given request is a policy question
+that changes without notice; a technical control that removes the
+sensitive content before it leaves the machine does not depend on that
+policy.
+
+Existing options are unsatisfying for this specific task. Secret
+scanners~\cite{gitleaks,trufflehog} detect credentials but do not produce
+a usable abstracted program, and they say nothing about identifiers or
+business constants. Code obfuscation~\cite{collberg1997taxonomy} destroys
+readability, which defeats the purpose of asking a model to reason about
+the code. Fully homomorphic or multi-party
+computation~\cite{yao1982protocols} does not apply to a hosted,
+instruction-tuned model. What is missing is a transformation that (i)
+removes proprietary tokens, (ii) preserves enough structure and control
+flow that a model can still give a useful answer, and (iii) is
+\emph{reversible}, so the answer---which refers to abstract tokens and
+abstract line numbers---can be translated back into something the
+developer can act on.
+
+This paper describes CodeAbstract, a tool built around that
+transformation, and an evaluation of the shipping implementation. Our
+contributions are:
+
+\begin{itemize}
+\item \textbf{A reversible abstraction pipeline} that pairs syntax-tree
+rewriting with a scoped symbol table, so that identically named symbols in
+different scopes receive distinct tokens and a model's line citations are
+translated back to the original file (Section~\ref{sec:method}).
+\item \textbf{A five-tier hybrid sensitivity classifier} that judges a
+literal by its own shape and its usage context, not only by the name bound
+to it, closing a class of leak in which a credential-holding string node
+escapes because it is syntactically distinct from the variable that names
+it (Section~\ref{sec:classify}).
+\item \textbf{A falsifiable evaluation.} We re-run seven metric pillars
+against the current code, and we include a historical regression harness
+that loads a pre-remediation commit and confirms the probes fire on known
+defects---an evaluation that has never failed is not evidence
+(Section~\ref{sec:setup}, Section~\ref{sec:results}).
+\item \textbf{A negative result, measured rather than assumed.} A
+deterministic linkage attack re-identifies the source file behind an
+abstracted output with certainty at every privacy level. We quantify this
+with a normalized-entropy metric and state the resulting threat model
+explicitly (Section~\ref{sec:reident}).
+\end{itemize}
+
+All numbers in this paper were produced by executing the evaluation suite
+against the current repository state on a Windows~11 host with CPython
+3.13.7; where an earlier internal report differs, we use the re-executed
+value and explain the difference (Section~\ref{sec:perf}).
+
+\section{Related Work}
+
+\textbf{Secret detection.} Meli et al.~\cite{meli2019git} measured
+large-scale credential leakage on GitHub and characterized the formats
+that leak; Sinha et al.~\cite{sinha2015detecting} proposed detection and
+remediation in repositories. Production scanners such as
+Gitleaks~\cite{gitleaks} and TruffleHog~\cite{trufflehog} match vendor
+regexes and entropy thresholds. CodeAbstract reuses this idea as one
+classifier tier, but its goal differs: a scanner flags a line for a human,
+whereas CodeAbstract must decide, for every node, whether to replace it
+and how to replace it reversibly.
+
+\textbf{Memorization and leakage in language models.} Carlini et
+al.~\cite{carlini2021extracting,carlini2023quantifying} demonstrated
+verbatim extraction of training data from language models and showed that
+memorization scales with model size and duplication. Yang et
+al.~\cite{yang2024memorization} and Al-Kaswan and
+Izadi~\cite{alkaswan2023abuse} extended this analysis to code models, and
+Lukas et al.~\cite{lukas2023analyzing} quantified personally identifiable
+information leakage. These results motivate a client-side control:
+CodeAbstract assumes any transmitted token may be retained.
+
+\textbf{Code models and their evaluation.}
+CodeBERT~\cite{feng2020codebert} and BERT-style
+pre-training~\cite{devlin2019bert} underpin learned secret detectors; the
+original proposal for this project targeted a fine-tuned CodeBERT
+detector. We report why that component is currently unbuilt
+(Section~\ref{sec:limits}): the available labeled data is circular, its
+labels derived from the same patterns a learned model would be graded
+against. Copilot-style code
+generation~\cite{chen2021codex,pearce2022asleep,hou2024llmse} is the
+downstream consumer CodeAbstract is designed to protect input to.
+
+\textbf{Anonymization and re-identification.} Sweeney's
+$k$-anonymity~\cite{sweeney2002kanon} and differential
+privacy~\cite{dwork2006differential} frame the general problem of
+releasing data without releasing identity. For code specifically,
+Caliskan-Islam et al.~\cite{caliskan2015deanon} and Abuhamad et
+al.~\cite{abuhamad2018authorship} showed that programmers can be
+re-identified from stylistic and structural features even after
+identifiers are removed. Our linkage attack (Section~\ref{sec:reident}) is
+an instance of the same phenomenon at the file level: abstraction removes
+names but preserves the abstract syntax tree, and the tree is a
+fingerprint. Code property graphs~\cite{yamaguchi2014cpg} likewise treat
+structure as a stable, name-independent signal.
+
+\textbf{Obfuscation.} Collberg et al.~\cite{collberg1997taxonomy}
+catalogued transformations that make code hard to understand. CodeAbstract
+deliberately does the opposite along the structural axis---it keeps the
+program legible so a model can reason about it---which is exactly why the
+re-identification result holds.
+
+\section{Threat Model and Problem Statement}
+\label{sec:threat}
+
+\textbf{Actors.} The \emph{developer} holds proprietary source $S$ and
+wants an answer to a question $q$ about it. The \emph{provider} hosts an
+LLM, receives whatever is transmitted, and may log or train on it. A
+passive \emph{adversary} later obtains provider-side logs.
+
+\textbf{Protected assets.} (1) Credential values---API keys, passwords,
+tokens, connection strings---whether bound to a revealing name or not, and
+whether spelled as \texttt{str} or \texttt{bytes}. (2) Proprietary
+identifiers: function, class, variable, and module names. (3) Business
+constants: prices, rates, fees, internal endpoints. (4) The text of the
+question $q$, which typically names the very things being hidden.
+
+\textbf{Explicitly out of scope.} CodeAbstract does not hide \emph{that}
+the developer is asking about a particular file, nor the file's control
+flow and structural shape. Section~\ref{sec:reident} shows this is not a
+conservative disclaimer but a measured limitation: the abstracted output
+is linkable to its source with near-certainty. Timing, network metadata,
+and provider compromise in transit are also out of scope.
+
+\textbf{Requirements.} A solution must (R1) emit no protected asset in the
+transmitted payload at any configured privacy level; (R2) preserve enough
+syntax and control flow that the model's answer is useful; (R3) be
+reversible---translate token- and line-level references in the response
+back to $S$; and (R4) keep the mapping between original and abstract names
+on the client, encrypted at rest.
+
+\section{System Design and Methodology}
+\label{sec:method}
+
+\subsection{Overview}
+
+CodeAbstract is a Python package (approximately 21{,}800 non-test lines,
+with a further 13{,}000 lines of tests) exposing a CLI, an interactive
+wizard, and an optional Flask workbench. Figure~\ref{fig:arch} shows the
+pipeline. Source $S$ and question $q$ are parsed; a scoped symbol table is
+built; each node is classified; sensitive nodes are replaced with stable
+tokens; a context window of $\pm k$ lines and an abstract$\rightarrow$original
+line index are recorded; the mapping table $M$ is encrypted with a key
+held outside the database; and the abstracted code $S'$ plus abstracted
+question $q'$ are sent to the provider. The response $R$, written in terms
+of tokens and abstract line numbers, is passed through
+\textsc{Reconstruct}, which decrypts $M$, rewrites line citations,
+substitutes original names collision-safely, and appends a source-context
+block per referenced symbol.
+
+\begin{figure}[!t]
+\centering
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw,rounded corners=1.5pt,align=center,inner sep=3pt,
+              minimum width=20mm,minimum height=7mm,fill=blue!5},
+  data/.style={draw,align=center,inner sep=3pt,minimum width=18mm,
+               minimum height=7mm,fill=gray!10},
+  store/.style={draw,align=center,inner sep=3pt,minimum width=18mm,
+                minimum height=7mm,fill=orange!12},
+  arr/.style={-{Latex[length=1.8mm]},thick},
+]
+% client column (left) top-to-bottom
+\node[data] (src) {Source $S$ + query $q$};
+\node[box,below=3mm of src] (parse) {Parse ($\texttt{ast}$ / tree-sitter)};
+\node[box,below=3mm of parse] (sym) {Scoped symbol table};
+\node[box,below=3mm of sym] (ctx) {Context-feature analysis};
+\node[box,below=3mm of ctx] (cls) {Five-tier hybrid \textsc{Classify}};
+\node[box,below=3mm of cls] (abs) {\textsc{Abstract}$(S,k)$:\\token + line index};
+\node[store,left=8mm of abs] (map) {encrypted\\map $M$ ($K$ in keychain)};
+% provider hop
+\node[data,below=3mm of abs] (out) {$S'$, $q'$};
+\node[data,right=10mm of out] (resp) {response $R$};
+% reconstruction path (right column) bottom-to-top
+\node[box,above=3mm of resp] (rec) {\textsc{Reconstruct}$(R,\tilde{M},K)$};
+\node[data,above=3mm of rec] (fb) {feedback on original\\names + line numbers};
+\node[box,above=3mm of fb] (rep) {privacy report + audit log};
+
+\draw[arr] (src) -- (parse);
+\draw[arr] (parse) -- (sym);
+\draw[arr] (sym) -- (ctx);
+\draw[arr] (ctx) -- (cls);
+\draw[arr] (cls) -- (abs);
+\draw[arr] (abs) -- (map);
+\draw[arr] (abs) -- (out);
+\draw[arr] (out) -- (resp) node[midway,below,font=\tiny,align=center]
+  {provider\\(untrusted)};
+\draw[arr] (resp) -- (rec);
+\draw[arr] (map) |- (rec);
+\draw[arr] (rec) -- (fb);
+\draw[arr] (fb) -- (rep);
+\end{tikzpicture}
+\caption{CodeAbstract pipeline. Only $S'$ and $q'$ cross to the provider;
+the mapping table $M$ and key $K$ never leave the client.}
+\label{fig:arch}
+\end{figure}
+
+\subsection{\textsc{Abstract}$(S,k)$}
+
+Python source is parsed with the standard \texttt{ast} module;
+JavaScript/TypeScript is parsed with tree-sitter~\cite{treesitter}. For
+Python, \textsc{Abstract} first builds a lexical scope tree
+(module~$\rightarrow$~class~$\rightarrow$~function~$\rightarrow$~comprehension)
+honoring \texttt{global}/\texttt{nonlocal} and the rule that a class scope
+is skipped in a nested function's lookup chain. Tokens are keyed on the
+pair $(\textit{scope}, \textit{name})$, so \texttt{alpha.result} and
+\texttt{beta.result} are distinct symbols with distinct definition lines.
+Literals and attributes occupy separate namespaces. Each mapped symbol
+records its binding site and every $(\textit{line}, \textit{col})$
+occurrence.
+
+Tokens follow a typed scheme (\texttt{FUNC\_0}, \texttt{VAR\_3},
+\texttt{SECRET\_1}, \texttt{MODULE\_2}, \texttt{NUM\_0}). Distinct prefixes
+help the model reason about roles and keep reconstruction unambiguous;
+Section~\ref{sec:reident} quantifies the information the \texttt{SECRET\_}
+prefix itself discloses.
+
+The abstract$\rightarrow$original line index is built by walking the
+mutated tree (which retains original line numbers) against a re-parse of
+the emitted code and pairing nodes until their shapes disagree; the walk
+stops at the first disagreement, so a partial index is possible but a
+wrong one is not. For the tree-sitter path, replacement is performed as
+byte-range edits over the original text, so formatting is preserved and
+the line map is the identity.
+
+Comments are stripped by default in every language, because a comment is
+prose written by the code's owners and is where business context is
+densest. \texttt{-{}-keep-comments} re-injects them, screening each one
+through the sensitivity classifier and rewriting any identifier named in a
+surviving comment to its token; re-injection is validated by re-parsing.
+
+\subsection{\textsc{Classify}: five-tier hybrid detection}
+\label{sec:classify}
+
+Each node is labeled \texttt{SECRET}, \texttt{VALUE}, or
+\texttt{IDENTIFIER} by the first tier that fires, in decreasing order of
+precision:
+
+\begin{enumerate}
+\item \textbf{Vendor credential format} (confidence 0.99): the literal
+matches one of 20 published key formats (Stripe, AWS, GitHub, Slack,
+Google, OpenAI, JWT, PEM, connection strings, \texttt{Authorization}
+values). \texttt{str}, \texttt{bytes}, and \texttt{bytearray} are coerced
+to text first, so a credential's protection does not depend on its literal
+prefix.
+\item \textbf{Binding context} (confidence $\ge 0.90$): the per-symbol
+usage score (below) reaches 0.80, or a \texttt{SECRET} label is inherited
+from an enclosing assignment, keyword argument, dict entry, comparison, or
+f-string template into the value bound there.
+\item \textbf{Name pattern} (0.75 / 0.70): the identifier text matches a
+\texttt{SECRET} or business-\texttt{VALUE} name pattern.
+\item \textbf{Entropy} (0.65): a long, opaque, high-Shannon-entropy
+literal with no vendor shape. An \emph{endpoint-literal} sub-tier labels
+bare URLs and dotted-quad IPs as \texttt{VALUE}.
+\item \textbf{Literal type} (0.55): a numeric constant, business-sensitive
+by default.
+\end{enumerate}
+
+A decision below confidence 0.60 is recorded as a low-confidence node on
+the mapping entry and surfaced in the privacy report, so uncertainty
+reaches the user rather than being rounded away. The same tier logic runs
+over language-agnostic signals for the tree-sitter path, so Python and
+JavaScript reach identical decisions with the same confidences.
+
+\subsection{Per-symbol usage context}
+
+Name- and shape-based tiers miss a credential that is bound to a
+neutral name (\texttt{p}, \texttt{blob}, \texttt{payload}) and never
+matches a vendor format. \textsc{Classify} therefore consumes a context
+score computed from thirteen weighted usage signals---environment reads
+($w{=}0.80$), \texttt{Authorization} header positions ($0.85$),
+\texttt{password=} keyword arguments ($0.90$), credential sinks such as
+\texttt{compare\_digest} ($0.85$), assembled values that match a
+credential shape after constant folding ($0.90$), interpolation into a
+credential-shaped template ($0.85$), and others. Signals are pooled
+\emph{per resolved symbol}, not per node, and combined as independent
+evidence (a noisy-OR):
+\begin{equation}
+s(x) \;=\; 1 - \prod_{g \in G(x)} \bigl(1 - w_g\bigr),
+\label{eq:noisyor}
+\end{equation}
+where $G(x)$ is the set of distinct signals observed for symbol $x$ and
+$w_g \in [0,1)$ its weight. Because no $w_g$ reaches 1, no finite set of
+signals yields certainty; several weak signals can still cross the
+tier-2 threshold.
+
+\subsection{\textsc{Reconstruct}$(R,\tilde{M},K)$}
+
+Reconstruction decrypts $M$ with the client-held key $K$, then (i)
+rewrites line citations---``line 6'', ``lines 5--6'', ``Line \#6''---using
+the inverse of the line index, \emph{before} any token substitution; (ii)
+substitutes original names in a single word-bounded \texttt{re.sub} pass
+with longest-token-first alternation, so \texttt{VAR\_1} cannot match
+inside \texttt{VAR\_10} and the output is never re-scanned; and (iii)
+appends a ``Source Context'' block of $\pm k$ lines of original code for
+each referenced symbol. In the web workbench, secret values are masked in
+every pane, including inside source-context blocks, and unmasking requires
+two independent gates.
+
+\subsection{Storage, encryption, and transparency}
+
+The mapping table is serialized and encrypted with Fernet (AES-128-CBC
+with HMAC-SHA256). The key is stored in the OS keychain, with a documented
+weaker key-directory fallback; the SQLite row holds ciphertext only. Every
+run appends a metadata-only record---file, provider, privacy level, token
+counts, detector version, never content---to a hash-chained JSONL audit
+log whose integrity check names the first broken link and exits non-zero,
+so it can gate CI. A \texttt{.codeabstractignore} file supports
+\texttt{keep:}, \texttt{secret:}, and \texttt{module:} directives; a
+\texttt{keep} rule is ignored if the node still classifies \texttt{SECRET}
+on its own evidence, so configuration can never place a credential on the
+wire.
+
+\section{Experimental Setup}
+\label{sec:setup}
+
+\subsection{Corpora}
+
+\textbf{Synthetic ($C_{\text{syn}}$).} Ten hand-written files (470 lines
+total, 31--48 each) spanning API clients, pricing, ML pipelines, auth,
+databases, and microservice routing, with \textbf{21 planted credential
+literals} whose ground truth is known by construction. Used for leakage,
+reconstruction, structure, performance, and mapping.
+
+\textbf{Classification ($C_{\text{cls}}$).} 150 labeled AST-node samples,
+50 each \texttt{SECRET}/\texttt{VALUE}/\texttt{IDENTIFIER}, stratified over
+11 domains.
+
+\textbf{Real ($C_{\text{real}}$).} 120 files (24{,}737 lines, mean 206,
+range 51--462) discovered deterministically from the local Python 3.13.7
+standard library across 18 top-level packages---code written with no
+knowledge of this tool. The standard library contains no credentials, so
+$C_{\text{real}}$ is used only for structure and re-identification, not
+for leakage ground truth.
+
+\subsection{Metrics}
+
+\textbf{Privacy Information Ratio (PIR).} For a file, let $N$ be the set of
+nodes the production classifier marks sensitive and $A \subseteq N$ those
+whose text does not appear verbatim in $S'$. Then
+\begin{equation}
+\mathrm{PIR} \;=\; 1 - \frac{|A|}{|N|},
+\qquad
+L_c \;=\; \frac{\text{leaked}_c}{\text{total}_c},
+\label{eq:pir}
+\end{equation}
+with per-category leakage $L_c$ for $c \in \{\texttt{SECRET}, \texttt{VALUE},
+\texttt{IDENTIFIER}\}$. We report the corpus mean. PIR's ground truth is
+computed with the \emph{same} context-aware path production uses; a
+context-blind ground truth was shown to miss 13 context-only secrets and
+is not used.
+
+\textbf{Planted-secret leakage.} Independently of PIR, we count how many
+of the 21 planted credential literals in $C_{\text{syn}}$ appear verbatim
+in $S'$, at each of the four privacy levels. This is the number that
+carries the privacy claim.
+
+\textbf{Classification.} Macro precision/recall/F1 and a confusion matrix
+over $C_{\text{cls}}$, with a dataset-integrity audit (regex-baseline
+accuracy, discriminative power, rationale leakage, blind-annotation share,
+provenance share) and a Cohen's $\kappa$ implementation~\cite{cohen1960coefficient}
+for future annotator agreement.
+
+\textbf{Mapping accuracy.} Per file, the mean of four checks against
+ground truth recoverable from the source text---definition-site accuracy,
+occurrence accuracy, shadow resolution (fraction of names appearing in
+$>1$ scope that received distinct tokens), and line-map accuracy---then
+the corpus mean.
+
+\textbf{Structure.} AST isomorphism (fraction of node types preserved
+exactly under abstraction), cyclomatic-complexity delta, and
+syntax-validity rate of $S'$.
+
+\textbf{Performance.} Wall-clock abstraction, reconstruction, and
+encryption round-trip times, and throughput in lines/second, plus a
+scaling curve to $\sim$312 lines.
+
+\textbf{Re-identification and Code Privacy Entropy (CPE).} A deterministic
+linkage attack (Section~\ref{sec:reident}) produces a posterior
+$p = (p_1,\dots,p_N)$ over candidate source files for each abstracted
+target. We report top-1 accuracy, mean reciprocal rank, advantage over
+chance
+\begin{equation}
+\mathrm{adv} \;=\; \frac{\text{acc}_{\text{top-1}} - 1/N}{1 - 1/N},
+\label{eq:adv}
+\end{equation}
+and the normalized Shannon entropy~\cite{shannon1948mathematical} of the
+posterior,
+\begin{equation}
+\mathrm{CPE} \;=\; \frac{-\sum_{i=1}^{N} p_i \log_2 p_i}{\log_2 N}
+\;\in\; [0,1],
+\label{eq:cpe}
+\end{equation}
+where $1$ means the attacker learned nothing and $0$ means certainty.
+
+\subsection{Falsifiability harness}
+
+A historical regression harness uses \texttt{git archive} to load the
+abstraction engine from a named pre-remediation commit into a scratch
+directory (the working tree is untouched) and runs five defect probes
+transcribed from the project's audit: verbatim secret transmission, the
+\texttt{VAR\_1}/\texttt{VAR\_10} substitution collision, import-name
+leakage, scope-blind token collapse, and a no-op strict privacy level. The
+Phase-3 exit criterion is that the suite reproduces every one of these on
+the old commit and none on the current engine.
+
+\section{Results and Discussion}
+\label{sec:results}
+
+Table~\ref{tab:summary} collects the headline figures at privacy level
+\texttt{high}; all targets are met except where noted.
+
+\begin{table}[!t]
+\caption{Summary of re-executed metrics (privacy level \texttt{high},
+CPython 3.13.7). Adversarial rows use $C_{\text{real}}$.}
+\label{tab:summary}
+\centering
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Metric} & \textbf{Value} & \textbf{Target} \\
+\midrule
+Planted credentials surviving ($C_{\text{syn}}$)     & 0 / 21   & 0 \\
+Privacy Information Ratio (mean)                      & 0.0024   & $\le 0.05$ \\
+\;\; \texttt{SECRET} / \texttt{VALUE} leakage        & 0.0\% / 0.24\% & --- \\
+Token hit rate / replacement accuracy                & 100\% / 100\% & $\ge 95\%$ \\
+Classification macro-F1                               & 0.8937   & $\ge 0.85$ \\
+AST isomorphism                                       & 1.0000   & 1.00 \\
+Syntax validity of $S'$                               & 100\%    & 100\% \\
+Mapping accuracy                                      & 0.9975   & $\ge 0.85$ \\
+Throughput (lines/s)                                  & $\approx$1{,}340 & $\ge 1{,}000$ \\
+Re-identification top-1 (all levels)                  & 1.000    & --- \\
+Code Privacy Entropy (all levels)                     & 0.0006   & --- \\
+Regression probes: old commit / current              & 5 / 5, 0 / 5 & --- \\
+Backend test suite                                    & 1{,}148 pass & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Privacy leakage}
+
+At every privacy level, \textbf{0 of 21 planted credential literals
+survive abstraction}, down from 8 of 21 at the \texttt{low} and
+\texttt{medium} levels of the pre-remediation engine. The three
+mechanisms responsible are label inheritance from a binding to the literal
+bound to it, whole-template classification of f-strings (a credential
+split across a literal fragment and an interpolation is flattened to
+\texttt{postgres://admin:\{\}@host/db} and matched as one value), and
+text coercion so that \texttt{b"sk\_live\_\dots"} is treated exactly as
+\texttt{"sk\_live\_\dots"}. Mean PIR is 0.0024. The only non-zero
+component at \texttt{high} is identifier leakage at 3.0\%, which is
+allowlisted standard-library and well-known-package names deliberately
+preserved at their use sites; preserving them removes an alignment channel
+in which a surviving \texttt{import} would pin a token. PIR is reported
+because the proposal specified it, but we treat the planted-secret count
+as authoritative: PIR's denominator is what the classifier flagged, so it
+is structurally blind to a missed secret, and it did not move---0.0024
+before and after---across a body of remediation that fixed twelve
+reproduced leak paths.
+
+\subsection{Classification}
+
+Macro-F1 on $C_{\text{cls}}$ is 0.8937 (accuracy 0.8933, 134/150), with
+per-class F1 of 0.970 (\texttt{SECRET}), 0.863 (\texttt{VALUE}), and 0.849
+(\texttt{IDENTIFIER}); the confusion is almost entirely
+\texttt{VALUE}$\leftrightarrow$\texttt{IDENTIFIER} (13 of 16 errors), and
+no \texttt{VALUE} or \texttt{IDENTIFIER} is misread as \texttt{SECRET}
+more than once. This figure must be read with its dataset-integrity audit:
+a naive name-regex already scores 0.8933 on this set by construction,
+only 16 of 150 items can separate two detectors, 61\% of the labels are
+justified by quoting the pattern list, and none were annotated blind or
+carry provenance. We therefore do not claim 0.89 as evidence that the
+hybrid classifier improves on a regex; we claim only that it does not
+regress, and we demonstrate context-tier capability separately with seven
+behavioral fixtures using neutral names that a name-regex scores 0/7 on
+and the context detector redacts 7/7, with 0/3 false positives on benign
+controls.
+
+\subsection{Mapping and reconstruction}
+
+Mapping accuracy is \textbf{0.9975} against the 0.85 target
+(definition-site 0.9946, occurrence 0.9955, shadow resolution 1.000 over
+12 shadowed names in $C_{\text{syn}}$, line-map 1.000). Shadow resolution
+of 1.000 is the concrete payoff of the scoped symbol table: a flat
+name$\rightarrow$token cache scores 0 on that check by definition, and a
+model reporting a bug in the second of two identically named locals would
+send the developer to the wrong function. Reconstruction token hit rate
+and replacement accuracy are both 100\%, and every reconstructed response
+carries source-context blocks. Character-level round-trip similarity of
+$S$ against abstract-then-reconstruct is only 0.30, but this is expected
+and by design: comments are stripped as policy and names are replaced, so
+low literal similarity is the intended behavior, not a fidelity defect;
+the meaningful fidelity signals are the token- and line-level accuracies,
+which are exact.
+
+\subsection{Structure preservation}
+
+AST isomorphism is \textbf{1.0000} on both corpora, cyclomatic-complexity
+delta is 0, and $S'$ is valid in 100\% of cases (470 abstraction runs on
+$C_{\text{syn}}$ across four levels, plus 120 files of $C_{\text{real}}$).
+Token-count ratio is 0.9967, i.e. abstraction is close to
+one-token-for-one. This is what makes the output useful to a model---and,
+as the next subsection shows, what makes it linkable.
+
+\subsection{Performance}
+\label{sec:perf}
+
+On the evaluation host, mean abstraction time is 29\,ms per
+synthetic file, encryption round-trip 3.5\,ms, and throughput
+1{,}336--1{,}560 lines/second across the four privacy levels (1{,}336 at
+\texttt{high}). The scaling curve is linear to 312 lines
+(Table~\ref{tab:scaling}), so per-1000-line latency is about 0.75\,s
+against a 3\,s interactive budget. An earlier internal report recorded
+5{,}336 lines/second. We attribute the difference to (i) a slower
+evaluation host and (ii) linear-time scope- and context-analysis
+pre-passes and regular-expression hardening (bounded quantifiers to
+prevent catastrophic backtracking) added during remediation, which impose
+a constant per-node cost the pre-remediation engine did not pay. The
+re-executed figure still clears the 1{,}000 lines/second target with
+margin, and we use it rather than the faster historical number.
+
+\begin{table}[!t]
+\caption{Abstraction time vs. input size (concatenated synthetic files).}
+\label{tab:scaling}
+\centering
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{@{}rrr@{}}
+\toprule
+\textbf{Lines} & \textbf{Abstraction time (ms)} & \textbf{Throughput (lines/s)} \\
+\midrule
+39  & 33.7  & 1{,}158 \\
+78  & 57.2  & 1{,}363 \\
+117 & 89.2  & 1{,}312 \\
+195 & 144.1 & 1{,}353 \\
+312 & 228.9 & 1{,}363 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Adversarial re-identification}
+\label{sec:reident}
+
+The linkage attack extracts a name-free structural fingerprint from every
+original file in a corpus: the ordered sequence of structural node types,
+its 3-grams, node-type frequencies, and function arities. Given one
+abstracted target, it scores that target's fingerprint against every
+candidate with a blended weighted-Jaccard similarity (0.50 ordered
+$n$-gram overlap, 0.35 unordered frequency overlap, 0.15 arity
+agreement), converts the scores to a posterior with a temperature-0.05
+softmax, and predicts the top-ranked candidate. Equations~\eqref{eq:adv}
+and~\eqref{eq:cpe} summarize the outcome.
+
+On $C_{\text{real}}$ (120 candidates, chance $1/120 = 0.0083$), the
+attack achieves \textbf{top-1 accuracy 1.000, MRR 1.000, advantage
+1.000, and CPE 0.0006 at every one of the four privacy levels}. The result
+on $C_{\text{syn}}$ is identical (top-1 1.000, CPE 0.0006, chance 0.100).
+Figure~\ref{fig:reident} places this against identifier survival, the
+axis the privacy levels actually control: on $C_{\text{real}}$, the
+fraction of original identifiers still present in $S'$ falls from 0.95 at
+\texttt{low} to 0.15 at \texttt{high}/\texttt{critical}---the
+name-hiding machinery works---while re-identification stays pinned at
+1.000, because privacy levels govern names and the attack reads shape.
+
+\begin{figure}[!t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=\columnwidth, height=4.7cm,
+  ybar, bar width=9pt,
+  ymin=0, ymax=1.12,
+  ylabel={rate}, ylabel style={font=\footnotesize},
+  symbolic x coords={low, medium, high, critical},
+  xtick=data,
+  tick label style={font=\footnotesize},
+  legend style={font=\tiny, at={(0.5,1.18)}, anchor=north, legend columns=2,
+                draw=none},
+  enlarge x limits=0.20,
+  nodes near coords, nodes near coords style={font=\tiny},
+  every node near coord/.append style={/pgf/number format/fixed,
+    /pgf/number format/precision=2},
+]
+\addplot coordinates {(low,1.0) (medium,1.0) (high,1.0) (critical,1.0)};
+\addplot coordinates {(low,0.95) (medium,0.94) (high,0.15) (critical,0.15)};
+\legend{re-identification top-1, identifier survival}
+\end{axis}
+\end{tikzpicture}
+\caption{On the 120-file real corpus, privacy levels drive identifier
+survival down (0.95$\rightarrow$0.15) but leave re-identification pinned
+at 1.00 and code privacy entropy at 0.0006. Structure, not names,
+identifies the file.}
+\label{fig:reident}
+\end{figure}
+
+Two consequences follow. First, \textbf{the structure-preservation
+success is also the re-identification failure}: the AST isomorphism of
+1.0 reported as evidence that abstraction keeps code legible is, viewed
+from the adversary's side, a perfect fingerprint. A tool cannot report
+one without the other. Second, \textbf{the privacy--utility trade-off the
+proposal set out to characterize has no trade-off to plot along the
+privacy-level axis for this threat}, because the re-identification term is
+constant. A separate, smaller channel: the typed token scheme labels its
+own findings---\texttt{SECRET\_}$n$ marks where a credential sat, about 9
+positions per file in $C_{\text{real}}$, information the original neutral
+identifier need not have carried.
+
+This does not make the tool worthless. It never claimed to hide that a
+file exists; the asset most users care about is ``do not send my
+credentials and identifiers to a third party,'' and Sections~\ref{sec:results}.A--C
+show that is enforced. But it means the guarantee must be stated as
+scoped: CodeAbstract protects the \emph{content} of proprietary
+identifiers, secrets, and business constants, and does not protect the
+\emph{fact} of which structural artifact is under discussion. Defenses
+worth evaluating---structural noise injection, statement reordering,
+dead-branch insertion, the syntax analogue of
+differential privacy~\cite{dwork2006differential}---are future work, and
+this attack is the instrument that would measure them.
+
+\subsection{Falsifiability and regression}
+
+Run against the pre-remediation commit, the harness reports
+\textbf{5 of 5} defect probes firing (verbatim secrets at
+\texttt{low}/\texttt{medium}, the substitution collision, import leakage,
+scope-blind collapse, and \texttt{critical} identical to \texttt{high});
+run against the current engine it reports \textbf{0 of 5}. The probes
+therefore discriminate rather than always passing or always failing, which
+is the property a green dashboard on a leaking system lacked. The full
+backend/CLI/algorithm/storage/web-unit test suite is 1{,}148 tests,
+passing in 235\,s; a Playwright browser end-to-end suite exists but was
+not executed on the evaluation host.
+
+\section{Limitations}
+\label{sec:limits}
+
+\textbf{Structural re-identification} (Section~\ref{sec:reident}) is the
+principal limitation and is not closable without giving up the property
+that makes the output useful.
+
+\textbf{No learned detector, and no independent detection benchmark.} The
+proposal targeted a fine-tuned CodeBERT secret
+detector~\cite{feng2020codebert} and a Random Forest sensitivity
+classifier. The Random Forest is implemented as a gated baseline over 27
+shape features that deliberately exclude the pattern matches; it scores
+0.70 against the 0.89 regex baseline, the expected result of withholding
+the labelling rule from the model, and it refuses to mark its own output
+trustworthy because its labels were not assigned blind. The CodeBERT
+fine-tune is not built: the only available labeled data is circular, and a
+model trained on it would learn the regexes. The blocking dependency is
+300--500 real samples labeled by two annotators blind to the pattern list;
+the schema, $\kappa$ computation, and circularity audit for that effort
+are implemented and unused.
+
+\textbf{Utility is not measured with humans.} The apparatus for a blind
+raw-vs-abstracted rating study---paired collection, content-addressed
+response cache, blind rating-sheet export---exists, but the headline
+utility number requires an LLM in the loop and human raters and is not
+reported here.
+
+\textbf{Corpus scale for leakage.} Planted-secret ground truth rests on 10
+synthetic files with 21 credentials. Two audit passes found leak paths on
+constructs absent from that corpus (\texttt{bytes} credentials, unscreened
+JavaScript comments, credential-template taint); each is now fixed and
+carries a regression test, but the general point stands that the corpus
+bounds what the suite can see.
+
+\textbf{Concurrency.} Under a sustained 16-thread write burst, SQLite lock
+contention produces intermittent ``database is locked'' errors
+($\sim$13\% of writes in measurement); the tested behavior is to fail
+that write safely with no corruption and no cross-session secret leakage,
+not to eliminate contention.
+
+\textbf{Environment.} Throughput is host-dependent; JavaScript scoping
+does not model hoisting or closures, so two symbols may share a token,
+which costs mapping precision and never privacy.
+
+\section{Conclusion and Future Work}
+
+CodeAbstract shows that a reversible, structure-preserving abstraction can
+remove credentials, proprietary identifiers, and business constants from
+code before it is sent to a hosted language model, and can translate the
+model's token- and line-level answer back onto the developer's own source.
+On the re-executed evaluation, no planted credential survives at any
+privacy level, mapping accuracy is 0.9975, structure is preserved exactly,
+and throughput clears the interactive target. The same evaluation, made
+falsifiable with a historical regression harness and an adversarial
+pillar, establishes the boundary of the guarantee: a deterministic linkage
+attack re-identifies the source file behind an abstracted output with
+certainty, because the abstract syntax tree that a model needs is also a
+fingerprint. The contribution is therefore twofold---a working
+content-level privacy control with a reversible mapping, and a measured,
+explicit statement of what that control does not cover.
+
+Future work is (i) structural defenses---semantics-preserving noise,
+reordering, and dead-code insertion---evaluated against the linkage attack
+as the privacy--utility instrument the level axis cannot provide; (ii) an
+independently annotated detection dataset to enable an honest learned
+classifier and a real detection benchmark; (iii) a human utility study
+using the existing blind-rating apparatus; and (iv) batch and pre-commit
+integration for the compliance use case.
+
+\section*{Reproducibility}
+
+The evaluation runner (\texttt{python evaluation/run\_eval.py}), the
+regression harness (\texttt{evaluation/regression\_harness.py}), and both
+corpora are in the repository. Every stochastic component is seeded; LLM
+responses, where used, are cached content-addressed. The figures in this
+paper were produced by running the suite at all four privacy levels and
+the linkage attack on the 120-file standard-library corpus under CPython
+3.13.7.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
+
+@inproceedings{meli2019git,
+  author    = {Meli, Michael and McNiece, Matthew R. and Reaves, Bradley},
+  title     = {How Bad Can It Git? Characterizing Secret Leakage in Public {GitHub} Repositories},
+  booktitle = {Proc. Network and Distributed System Security Symposium (NDSS)},
+  year      = {2019}
+}
+
+@inproceedings{sinha2015detecting,
+  author    = {Sinha, Vibha Singhal and Saha, Diptikalyan and Dhoolia, Pankaj and Padhye, Rohan and Mani, Senthil},
+  title     = {Detecting and Mitigating Secret-Key Leaks in Source Code Repositories},
+  booktitle = {Proc. IEEE/ACM Working Conf. Mining Software Repositories (MSR)},
+  pages     = {396--400},
+  year      = {2015}
+}
+
+@inproceedings{carlini2021extracting,
+  author    = {Carlini, Nicholas and Tramer, Florian and Wallace, Eric and Jagielski, Matthew and Herbert-Voss, Ariel and Lee, Katherine and Roberts, Adam and Brown, Tom and Song, Dawn and Erlingsson, Ulfar and Oprea, Alina and Raffel, Colin},
+  title     = {Extracting Training Data from Large Language Models},
+  booktitle = {Proc. 30th USENIX Security Symposium},
+  pages     = {2633--2650},
+  year      = {2021}
+}
+
+@inproceedings{carlini2023quantifying,
+  author    = {Carlini, Nicholas and Ippolito, Daphne and Jagielski, Matthew and Lee, Katherine and Tramer, Florian and Zhang, Chiyuan},
+  title     = {Quantifying Memorization Across Neural Language Models},
+  booktitle = {Proc. Int. Conf. Learning Representations (ICLR)},
+  year      = {2023}
+}
+
+@inproceedings{yang2024memorization,
+  author    = {Yang, Zhou and Zhao, Zhipeng and Wang, Chenyu and Shi, Jieke and Kim, Dongsun and Han, DongGyun and Lo, David},
+  title     = {Unveiling Memorization in Code Models},
+  booktitle = {Proc. IEEE/ACM Int. Conf. Software Engineering (ICSE)},
+  year      = {2024}
+}
+
+@inproceedings{lukas2023analyzing,
+  author    = {Lukas, Nils and Salem, Ahmed and Sim, Robert and Tople, Shruti and Wutschitz, Lukas and Zanella-B{\'e}guelin, Santiago},
+  title     = {Analyzing Leakage of Personally Identifiable Information in Language Models},
+  booktitle = {Proc. IEEE Symposium on Security and Privacy (S\&P)},
+  pages     = {346--363},
+  year      = {2023}
+}
+
+@inproceedings{feng2020codebert,
+  author    = {Feng, Zhangyin and Guo, Daya and Tang, Duyu and Duan, Nan and Feng, Xiaocheng and Gong, Ming and Shou, Linjun and Qin, Bing and Liu, Ting and Jiang, Daxin and Zhou, Ming},
+  title     = {{CodeBERT}: A Pre-Trained Model for Programming and Natural Languages},
+  booktitle = {Findings of the Assoc. for Computational Linguistics: EMNLP},
+  pages     = {1536--1547},
+  year      = {2020}
+}
+
+@inproceedings{devlin2019bert,
+  author    = {Devlin, Jacob and Chang, Ming-Wei and Lee, Kenton and Toutanova, Kristina},
+  title     = {{BERT}: Pre-training of Deep Bidirectional Transformers for Language Understanding},
+  booktitle = {Proc. Conf. North American Chapter of the Assoc. for Computational Linguistics (NAACL-HLT)},
+  pages     = {4171--4186},
+  year      = {2019}
+}
+
+@article{chen2021codex,
+  author  = {Chen, Mark and Tworek, Jerry and Jun, Heewoo and Yuan, Qiming and others},
+  title   = {Evaluating Large Language Models Trained on Code},
+  journal = {arXiv preprint arXiv:2107.03374},
+  year    = {2021}
+}
+
+@inproceedings{pearce2022asleep,
+  author    = {Pearce, Hammond and Ahmad, Baleegh and Tan, Benjamin and Dolan-Gavitt, Brendan and Karri, Ramesh},
+  title     = {Asleep at the Keyboard? Assessing the Security of {GitHub} {Copilot}'s Code Contributions},
+  booktitle = {Proc. IEEE Symposium on Security and Privacy (S\&P)},
+  pages     = {754--768},
+  year      = {2022}
+}
+
+@inproceedings{caliskan2015deanon,
+  author    = {Caliskan-Islam, Aylin and Harang, Richard and Liu, Andrew and Narayanan, Arvind and Voss, Clare and Yamaguchi, Fabian and Greenstadt, Rachel},
+  title     = {De-anonymizing Programmers via Code Stylometry},
+  booktitle = {Proc. 24th USENIX Security Symposium},
+  pages     = {255--270},
+  year      = {2015}
+}
+
+@inproceedings{abuhamad2018authorship,
+  author    = {Abuhamad, Mohammed and AbuHmed, Tamer and Mohaisen, Aziz and Nyang, DaeHun},
+  title     = {Large-Scale and Language-Oblivious Code Authorship Identification},
+  booktitle = {Proc. ACM SIGSAC Conf. Computer and Communications Security (CCS)},
+  pages     = {101--114},
+  year      = {2018}
+}
+
+@article{sweeney2002kanon,
+  author  = {Sweeney, Latanya},
+  title   = {k-anonymity: A Model for Protecting Privacy},
+  journal = {Int. J. Uncertainty, Fuzziness and Knowledge-Based Systems},
+  volume  = {10},
+  number  = {5},
+  pages   = {557--570},
+  year    = {2002}
+}
+
+@inproceedings{dwork2006differential,
+  author    = {Dwork, Cynthia},
+  title     = {Differential Privacy},
+  booktitle = {Proc. Int. Colloquium on Automata, Languages and Programming (ICALP)},
+  pages     = {1--12},
+  year      = {2006}
+}
+
+@article{shannon1948mathematical,
+  author  = {Shannon, Claude E.},
+  title   = {A Mathematical Theory of Communication},
+  journal = {Bell System Technical Journal},
+  volume  = {27},
+  number  = {3},
+  pages   = {379--423},
+  year    = {1948}
+}
+
+@article{cohen1960coefficient,
+  author  = {Cohen, Jacob},
+  title   = {A Coefficient of Agreement for Nominal Scales},
+  journal = {Educational and Psychological Measurement},
+  volume  = {20},
+  number  = {1},
+  pages   = {37--46},
+  year    = {1960}
+}
+
+@techreport{collberg1997taxonomy,
+  author      = {Collberg, Christian and Thomborson, Clark and Low, Douglas},
+  title       = {A Taxonomy of Obfuscating Transformations},
+  institution = {Dept. of Computer Science, University of Auckland},
+  number      = {148},
+  year        = {1997}
+}
+
+@inproceedings{yamaguchi2014cpg,
+  author    = {Yamaguchi, Fabian and Golde, Nico and Arp, Daniel and Rieck, Konrad},
+  title     = {Modeling and Discovering Vulnerabilities with Code Property Graphs},
+  booktitle = {Proc. IEEE Symposium on Security and Privacy (S\&P)},
+  pages     = {590--604},
+  year      = {2014}
+}
+
+@article{hou2024llmse,
+  author  = {Hou, Xinyi and Zhao, Yanjie and Liu, Yue and Yang, Zhou and Wang, Kailong and Li, Li and Luo, Xiapu and Lo, David and Grundy, John and Wang, Haoyu},
+  title   = {Large Language Models for Software Engineering: A Systematic Literature Review},
+  journal = {ACM Trans. Software Engineering and Methodology},
+  year    = {2024}
+}
+
+@article{alkaswan2023abuse,
+  author  = {Al-Kaswan, Ali and Izadi, Maliheh},
+  title   = {The (ab)use of Open Source Code to Train Large Language Models},
+  journal = {arXiv preprint arXiv:2302.13681},
+  year    = {2023}
+}
+
+@misc{treesitter,
+  author       = {Brunsfeld, Max and others},
+  title        = {Tree-sitter: An Incremental Parsing System for Programming Tools},
+  howpublished = {\url{https://tree-sitter.github.io/tree-sitter/}},
+  year         = {2018},
+  note         = {Accessed 2026-08-30}
+}
+
+@misc{gitleaks,
+  author       = {Rumsey, Zachary and contributors},
+  title        = {Gitleaks: Detect and Prevent Secrets in Git Repositories},
+  howpublished = {\url{https://github.com/gitleaks/gitleaks}},
+  year         = {2018},
+  note         = {Accessed 2026-08-30}
+}
+
+@misc{trufflehog,
+  author       = {{Truffle Security}},
+  title        = {TruffleHog: Find, Verify, and Analyze Leaked Credentials},
+  howpublished = {\url{https://github.com/trufflesecurity/trufflehog}},
+  year         = {2017},
+  note         = {Accessed 2026-08-30}
+}
+
+@article{yao1982protocols,
+  author  = {Yao, Andrew C.},
+  title   = {Protocols for Secure Computations},
+  journal = {Proc. 23rd Annu. Symp. Foundations of Computer Science (FOCS)},
+  pages   = {160--164},
+  year    = {1982}
+}
+
+

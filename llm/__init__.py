@@ -250,10 +250,11 @@ def create_client(
         Gemini was the only implementation.
     """
     if provider is None and api_key:
-        try:
-            name = resolve_provider(None)
-        except ProviderError:
-            name = LEGACY_DEFAULT_PROVIDER
+        # An explicit key with no provider named must never be guessed onto
+        # whichever provider happens to already have a key in the
+        # environment or config -- that would silently hand this key to a
+        # different vendor's API. Always the documented legacy default.
+        name = LEGACY_DEFAULT_PROVIDER
     else:
         name = resolve_provider(provider)
 

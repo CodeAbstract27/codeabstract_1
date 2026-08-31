@@ -210,6 +210,45 @@ class TestProviderRegistry:
         assert '--provider' in str(excinfo.value)
 
 
+class TestCreateClientLegacyKey:
+    """
+    Regression: ``create_client(api_key=..., provider=None)`` — the shape
+    ``codeabstract review file.py --api-key <key>`` compiles to when
+    ``--provider`` is omitted — used to try ``resolve_provider(None)``
+    first and only fall back to the documented legacy default (gemini)
+    when that raised. If the environment or config already had a *different*
+    provider ready (e.g. ANTHROPIC_API_KEY set for unrelated tooling), the
+    explicit key silently got attached to that provider's client instead —
+    sending it to the wrong vendor's API on every request.
+    """
+
+    def test_explicit_key_always_uses_legacy_default_when_provider_omitted(
+        self, monkeypatch
+    ):
+        from llm import LEGACY_DEFAULT_PROVIDER, create_client
+
+        monkeypatch.delenv('GEMINI_API_KEY', raising=False)
+        monkeypatch.delenv('GOOGLE_API_KEY', raising=False)
+        monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+        # A different provider is fully ready via the environment.
+        monkeypatch.setenv('ANTHROPIC_API_KEY', 'sk-ant-unrelated-tooling-key')
+
+        client = create_client(api_key='the-users-explicit-key')
+
+        assert client.provider == LEGACY_DEFAULT_PROVIDER
+        assert client.api_key == 'the-users-explicit-key'
+
+    def test_explicit_provider_with_explicit_key_is_unaffected(self, monkeypatch):
+        from llm import create_client
+
+        monkeypatch.setenv('ANTHROPIC_API_KEY', 'sk-ant-unrelated-tooling-key')
+
+        client = create_client(api_key='an-explicit-openai-key', provider='openai')
+
+        assert client.provider == 'openai'
+        assert client.api_key == 'an-explicit-openai-key'
+
+
 class TestSharedClientBehaviour:
     """Retries, timing and token accounting live in one place for all providers."""
 
@@ -526,6 +565,33 @@ class TestAuditLog:
         assert not verification.ok
         assert any('removed' in problem for problem in verification.problems)
 
+    def test_reordering_entries_is_detected(self, tmp_path):
+        from storage import audit_log
+
+        path = tmp_path / "audit.log"
+        for index in range(4):
+            audit_log.append_entry('abstract', path=path, source_file=f'{index}.py')
+
+        lines = path.read_text(encoding='utf-8').splitlines()
+        reordered = [lines[0], lines[2], lines[1], lines[3]]
+        path.write_text("\n".join(reordered) + "\n", encoding='utf-8')
+
+        verification = audit_log.verify_chain(path=path)
+        assert not verification.ok
+
+    def test_appended_malformed_line_is_detected(self, tmp_path):
+        from storage import audit_log
+
+        path = tmp_path / "audit.log"
+        audit_log.append_entry('abstract', path=path, source_file='a.py')
+
+        with open(path, 'a', encoding='utf-8') as handle:
+            handle.write('this is not a json object\n')
+
+        verification = audit_log.verify_chain(path=path)
+        assert not verification.ok
+        assert any('not a valid record' in problem for problem in verification.problems)
+
     def test_request_entry_records_provider_and_tokens(self, tmp_path):
         from storage import audit_log
 
@@ -614,6 +680,64 @@ class TestKeyHandling:
         assert store.load(reference) == b'a-fernet-key'
         assert store.delete(reference) is True
         assert store.delete(reference) is False
+
+    def test_loading_a_deleted_key_fails_cleanly(self, tmp_path):
+        """A key removed after being stored (or never written) must raise
+        a clear KeyStoreError, not an unhandled OSError."""
+        from storage.key_store import FileKeyStore, KeyStoreError
+
+        store = FileKeyStore(directory=tmp_path / "keys")
+        reference = store.store('session-b', b'a-fernet-key')
+        store.delete(reference)
+
+        with pytest.raises(KeyStoreError):
+            store.load(reference)
+
+    def test_unrecognised_key_reference_fails_cleanly(self):
+        from storage.key_store import KeyStoreError, load_session_key
+
+        with pytest.raises(KeyStoreError):
+            load_session_key('not-a-real-prefix:session-x')
+
+    def test_path_traversal_in_session_id_is_contained(self, tmp_path):
+        """A session id is a UUID from the database, but the key store
+        builds a filesystem path from it -- a crafted id must not escape
+        the key directory."""
+        from storage.key_store import FileKeyStore
+
+        directory = tmp_path / "keys"
+        store = FileKeyStore(directory=directory)
+        reference = store.store('../../etc/passwd', b'a-fernet-key')
+
+        stored_files = list(directory.rglob('*.key'))
+        assert len(stored_files) == 1
+        assert stored_files[0].parent == directory
+        assert store.load(reference) == b'a-fernet-key'
+
+    def test_empty_session_id_is_rejected(self, tmp_path):
+        from storage.key_store import FileKeyStore, KeyStoreError
+
+        store = FileKeyStore(directory=tmp_path / "keys")
+        with pytest.raises(KeyStoreError):
+            store.store('', b'a-fernet-key')
+
+    def test_corrupted_ciphertext_fails_closed(self):
+        """Decryption must raise rather than return garbage or partial
+        data when the ciphertext has been altered."""
+        result = abstract(PYTHON_SOURCE, privacy_level='high')
+        corrupted = result.encrypted_mapping[:-5] + b'XXXXX'
+
+        with pytest.raises(ValueError):
+            decrypt_mapping(corrupted, result.encryption_key)
+
+    def test_wrong_key_fails_closed(self):
+        from cryptography.fernet import Fernet
+
+        result = abstract(PYTHON_SOURCE, privacy_level='high')
+        wrong_key = Fernet.generate_key()
+
+        with pytest.raises(ValueError):
+            decrypt_mapping(result.encrypted_mapping, wrong_key)
 
     def test_database_alone_cannot_decrypt(self):
         from config.settings import get_db_path

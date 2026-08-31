@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Sign up — CodeAbstract{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+  <section class="panel auth-panel">
+    <h2>Create an account</h2>
+    <p class="pane-note">
+      Only an email and password are stored — the password as a salted
+      hash, never in the clear. Nothing about your code is tied to it.
+    </p>
+
+    <form id="signup-form" novalidate>
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="email" name="email" required autocomplete="username">
+      </label>
+
+      <label class="field">
+        <span>Password <em>(at least 8 characters)</em></span>
+        <input type="password" id="password" name="password" required minlength="8"
+               autocomplete="new-password">
+      </label>
+
+      <div class="actions">
+        <button type="submit" class="primary">Create account</button>
+      </div>
+
+      <p id="auth-status" class="status" role="status"></p>
+    </form>
+
+    <p class="pane-note">
+      Already have an account? <a href="{{ url_for('auth_ui.login_page') }}">Sign in</a>.
+    </p>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='auth.js') }}" data-mode="signup"></script>
+{% endblock %}

@@ -14,9 +14,26 @@
     </a>
     <p class="tagline">Privacy-preserving LLM code consultation</p>
     <nav class="nav">
+      {% if is_authenticated %}
+      <a href="{{ url_for('ui.dashboard') }}">Dashboard</a>
+      {% endif %}
       <a href="{{ url_for('ui.index') }}">Workbench</a>
       <a href="{{ url_for('ui.sessions_page') }}">Sessions</a>
+      {% if is_authenticated %}
+      <a href="{{ url_for('ui.insights') }}">Insights</a>
+      {% endif %}
     </nav>
+    <div class="account">
+      {% if is_authenticated %}
+      <span class="account-email">{{ current_user_email }}</span>
+      <form class="logout-form" method="post" action="{{ url_for('auth_ui.logout') }}">
+        <button type="submit" class="link-button">Log out</button>
+      </form>
+      {% else %}
+      <a href="{{ url_for('auth_ui.login_page') }}">Sign in</a>
+      <a href="{{ url_for('auth_ui.signup_page') }}" class="signup-link">Sign up</a>
+      {% endif %}
+    </div>
   </header>
 
   <main class="page">

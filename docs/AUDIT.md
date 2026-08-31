@@ -467,3 +467,223 @@ can hide leaks. These were probed on a running system, not assumed:
   authoritative propagation pass — a patch applied there during this audit
   had no effect at all until it was moved. Worth deleting before it misleads
   someone else.
+
+---
+
+# Third pass — backend/CLI and real-browser frontend, 24 August 2026
+
+> Performed against `main` after the L1–L6 fixes, on Python 3.13, by two
+> independent sessions working in parallel and coordinating directly: one on
+> the backend/CLI/algorithm/storage layer, one on real-browser frontend E2E
+> (Playwright). Method: inventory every module with zero or thin direct test
+> coverage, then test each by real execution — `CliRunner`, live HTTP
+> requests against a running server, a real headless browser — rather than
+> unit-testing implementation details. Where the first two passes found
+> leaks the corpus never exercised, this pass targeted the layer *around*
+> the abstraction engine: the CLI commands and provider factory that call
+> it, and the browser that actually renders its output.
+
+The 733→978-test suite (grown further by teammate merges since the second
+pass) was green throughout. Nine more defects were found underneath it —
+three of them critical, none caught by any existing test — each reproduced,
+fixed, and covered by a regression test. Final combined suite: **1,162
+tests** (1,039 backend + 123 browser E2E on Chromium by default), plus a
+354-test Chromium/Firefox/WebKit cross-browser smoke pass.
+
+| Defect | Severity | Component | Status |
+|---|---|---|---|
+| [T1](#t1--review-and-interactive-print-live-secrets-to-the-terminal) `review`/`interactive` leak live secrets to the terminal | Critical | `commands/review_cmd.py`, `commands/interactive_cmd.py` | **Fixed** |
+| [T2](#t2--an-explicit---api-key-can-be-sent-to-the-wrong-provider) Explicit `--api-key` routed to the wrong provider | Critical | `llm/__init__.py` | **Fixed** |
+| [T3](#t3--apply-fix-can-classify-an-unrelated-block-as-a-safe-whole-file-rewrite) `apply` can classify an unrelated block as a whole-file rewrite | High | `algorithms/apply_fix.py` | **Fixed** |
+| [T4](#t4--session-listing-can-silently-drop-the-newest-session) Session listing can silently drop the newest session | Medium | `storage/session_manager.py` | **Fixed** |
+| [T5](#t5--audit-log-csv-export-is-invalid-when-a-field-contains-a-quote) Audit-log CSV export invalid on an embedded quote | Medium | `commands/audit_cmd.py` | **Fixed** |
+| [T6](#t6t7--mobile-viewport-horizontal-overflow) Mobile-viewport horizontal overflow (two root causes) | Medium | `web/static/app.css` | **Fixed** |
+| [T8](#t8--webkit-only-horizontal-scroll-at-375px) WebKit-only horizontal scroll at 375px | Medium | `web/static/app.css` | **Fixed** |
+
+## T1 — `review` and `interactive` print live secrets to the terminal
+
+**Severity: Critical** · `commands/review_cmd.py`, `commands/interactive_cmd.py`
+
+`codeabstract translate` had already been fixed (previous commit) to
+reconstruct against a *masked* view of the mapping table rather than the raw
+session mapping, because RECONSTRUCT's "Source Context" blocks include ±k
+lines of the *original* source per symbol — and the line that bound a
+credential contains the credential. Its two siblings were never given the
+same fix. `codeabstract review` (the README's flagship command) and
+`codeabstract interactive` (the README's *recommended* entry point) both
+still reconstructed against the raw mapping and printed the result straight
+to the terminal, unconditionally, on every run.
+
+Reproduced end to end (real `CliRunner` invocation, a mocked LLM response
+citing the abstraction token by name — exactly how a real response would):
+a Stripe-shaped key planted in the source appeared in `review`'s output with
+no flag able to suppress it.
+
+**Fix.** Both commands now route through `core.privacy_report.display_mapping`
+before reconstructing, matching `translate_cmd.py`. `review` gained a
+`--reveal` flag; `interactive` masks unconditionally, with a note pointing
+at `translate --reveal` for the one time a user actually wants the value.
+The *session itself* still stores the raw, unmasked mapping — masking is
+display-only, so `apply`/`translate --reveal` keep working.
+
+## T2 — An explicit `--api-key` can be sent to the wrong provider
+
+**Severity: Critical** · `llm/__init__.py`
+
+`create_client(api_key=..., provider=None)` — the shape
+`codeabstract review file.py --api-key X` compiles to when `--provider` is
+omitted — is documented as resolving to the legacy default provider
+(Gemini). The implementation instead tried `resolve_provider(None)` first,
+which succeeds whenever *any* provider already has a key in the environment
+or config, and only fell back to the documented default when that raised.
+If a user had, say, `ANTHROPIC_API_KEY` set for unrelated tooling and typed
+`--api-key` meaning their Gemini key, the explicit key was silently
+constructed into an `AnthropicClient` and would have been sent to
+Anthropic's API as if it were an Anthropic key on the very first request.
+
+Reproduced directly: `create_client(api_key='GEMINI-KEY')` with
+`ANTHROPIC_API_KEY` set in the environment returned a client with
+`provider == 'anthropic'` and the caller's key attached.
+
+**Fix.** An explicit key with no provider named now always resolves to the
+documented legacy default, full stop — no environment/config-based guessing
+in that branch.
+
+## T3 — `apply` can classify an unrelated block as a safe whole-file rewrite
+
+**Severity: High** · `algorithms/apply_fix.py`
+
+Whole-file-rewrite detection matches the suggested code's top-level
+function/class names against the original file's. For a script with *no*
+top-level defs (a plain script — very common), it fell back to a bare line-
+count check: any code block with at least as many lines as the original was
+classified `is_whole_file=True`. Combined with "no unresolved tokens," an
+LLM response containing an entirely unrelated fenced code block — long
+enough by coincidence, referencing no abstraction tokens at all — was
+offered as `applicable=True`, which `codeabstract apply --yes` would write
+straight over the user's file with no confirmation.
+
+Reproduced: a 3-line script, an unrelated "here's an example" block with two
+throwaway function defs, correctly parses and has zero unresolved tokens →
+classified applicable before the fix, correctly rejected after.
+
+**Fix.** The no-top-level-defs fallback now additionally requires the block
+to share most of the original's content (`difflib.SequenceMatcher` ratio
+≥ 0.4), preserving the legitimate case (a genuine one-line fix to a plain
+script) while rejecting a coincidentally-long unrelated block.
+
+## T4 — Session listing can silently drop the newest session
+
+**Severity: Medium** · `storage/session_manager.py`
+
+`list_sessions()` ran `ORDER BY created_at DESC LIMIT ?` with no
+tie-breaker, and `created_at` is a SQLite `TIMESTAMP` with only
+*second*-level granularity. Any burst of session creation within one second
+— sixteen concurrent web requests, a batch script, or simply a fast test
+run — produces rows with an identical `created_at`, and SQLite's tie-break
+turned out to favour insertion order, the opposite of the intended `DESC`.
+The truly-newest session could be silently excluded from "recent sessions"
+while stale same-second rows were shown instead.
+
+Reproduced deterministically (25 rows forced to one identical timestamp):
+the last-inserted row was absent from `list_sessions(limit=20)`.
+
+**Fix.** Added `rowid DESC` as a secondary sort key.
+
+## T5 — Audit-log CSV export is invalid when a field contains a quote
+
+**Severity: Medium** · `commands/audit_cmd.py`
+
+`codeabstract audit export --format csv` wrapped a field containing a `"`
+in quotes without doubling the embedded quote — not valid CSV, and silently
+corrupts the row (and, in the worst case, subsequent rows) on re-parse by
+any standard CSV reader.
+
+**Fix.** Standard RFC-4180 quote doubling.
+
+## T6/T7 — Mobile-viewport horizontal overflow
+
+**Severity: Medium** · `web/static/app.css` · found by the frontend session, real 375px-viewport Playwright runs, not by reading the CSS
+
+Two independent root causes, both "a flex/grid item's default `min-width:
+auto` prevents it from shrinking below its content's intrinsic size,"
+forcing the whole page to scroll horizontally below ~440px:
+
+- `<select>` elements size to their widest `<option>` text
+  ("`critical` — Everything is abstracted including short names"), wider
+  than a phone viewport, with no `size` attribute keeping them narrow the
+  way a text input has by default.
+- `.pane` (a CSS Grid item in the side-by-side code view) let a long,
+  `white-space: pre` code line grow the grid track — and the whole page
+  under it — instead of scrolling inside `.code-view`'s own
+  `overflow: auto` as intended.
+
+**Fix.** `width: 100%` + `max-width: 100%` on the shared input/select/
+textarea rule, `min-width: 0` on `.field` and on `.pane`.
+
+## T8 — WebKit-only horizontal scroll at 375px
+
+**Severity: Medium** · `web/static/app.css` · found on a real WebKit run after T6/T7 were already fixed on Chromium/Firefox
+
+A ~6px horizontal scroll remained at 375px on WebKit specifically —
+confirmed as genuinely scrollable (`scrollLeft` moved on `scrollTo`, not
+just a layout-metric artifact), not present on Chromium or Firefox.
+WebKit includes a block's own end-padding in the root element's
+scrollable-overflow area differently from the other two engines.
+
+**Fix.** `overflow-x: hidden` on both `html` and `body` — WebKit's
+root-scroller handling didn't respect it on `html` alone.
+
+## What was verified and found sound this pass
+
+- Every other reconstruct/output sink traced from source: the web layer
+  (already correct — `web/service.py` used `display_mapping` throughout),
+  `apply_fix`'s write-back (intentionally unmasked — writing a literal
+  `SECRET_0` token into the user's file would corrupt it), `providers
+  compare` (abstracts internally before any client call; the JSON export
+  deliberately excludes response content), the privacy report's `kept`
+  list (SECRET-labelled nodes verified unable to reach it — hardened at
+  two independent points in `algorithms/abstract.py`), `config show`'s
+  masking (L5, still holds).
+- 6 Hypothesis properties (200 examples each, ~1,200 generated cases):
+  secret-canary-never-crosses-boundary, VAR_1/VAR_10 collision safety at
+  arbitrary scale, D4 scope isolation, syntax-preservation post-abstraction,
+  determinism, token-substitution-boundary-safety. No counterexamples.
+- 10,000-identifier abstraction/reconstruction: no corruption, ~1.5s.
+  Sixteen concurrent threads, sixteen real secrets, through the actual
+  `save_session`/`load_session` API: zero cross-contamination across 30+
+  verification runs (this is also what surfaced T4).
+- Real-browser DOM/storage/cookie leak checks (canary + real credential
+  shapes) across `localStorage`, `sessionStorage`, cookies, and the
+  browser's own outgoing network requests: none leak outside the one
+  documented exception (the original-code pane echoing the user's own
+  paste).
+- XSS payloads (`<script>`, `<img onerror>`, and more) across source,
+  filename, query, LLM-reply and translate vectors, in a real browser: no
+  execution, no injected elements — the `.innerHTML`-only-for-server-
+  escaped-`html`-fields contract in `web/static/app.js` holds under actual
+  rendering, not just JSON-body inspection.
+
+## Still open, unchanged or newly confirmed
+
+- **SQLite lock contention under sustained concurrent writers is real and
+  still present.** Not eliminated by this or the second pass. Under a
+  16-thread write burst, `sqlite3.OperationalError: database is locked`
+  occurred intermittently (~13% in this session's measurements). The
+  system's tested, documented behaviour is to fail that write safely — no
+  corruption, no cross-contamination — rather than to eliminate contention
+  outright. An application-level write retry or a serialized writer queue
+  is follow-up work, not done here.
+- **Packaging (D6) is still open.** Installing the package still ships
+  twelve generic top-level names (`core`, `utils`, `config`, `ml`, …) into
+  site-packages. Unchanged since the first pass; needs a `src/`-layout
+  restructure, out of scope for a testing pass.
+- **`web/static/app.js` reads a `sessionStorage` key nothing ever sets** —
+  dead code implying a "resume from the Sessions page" flow that cannot
+  actually run. Not a security issue; not removed.
+- **`ml/random_forest.py`/`ml/features.py`** confirmed to have zero
+  live-pipeline reachability (evaluation-only, no CLI or web code path
+  imports `ml.*`) — lightly probed for crashes on adversarial input, not
+  deep-audited, since it cannot affect what is actually sent anywhere.
+- **Utility (the 80% target) still has no instrument.** Unchanged from the
+  first pass.

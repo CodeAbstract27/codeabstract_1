@@ -583,6 +583,61 @@ class _Collector:
             for fragment in fragments:
                 self.inherited[fragment.id] = 'SECRET'
 
+    # -- "+"-concatenated strings ---------------------------------------
+
+    def _flatten_concat(self, node) -> Optional[str]:
+        """
+        Flatten a chain of ``+`` string-literal concatenation into the text
+        it assembles at runtime, or ``None`` if any operand is not a plain
+        string literal.
+
+        The counterpart of ``_handle_template`` for the older concatenation
+        spelling: ``"sk_live_" + "abc123..."`` is the same split-credential
+        shape as a template literal's ``${}``, and each half can fall
+        individually below the entropy floor or a vendor prefix's minimum
+        length while the assembled string is a live-looking key.
+
+        Deliberately narrow: an operand that is an ``identifier`` (a
+        fragment held in a variable assigned on an earlier line) returns
+        ``None`` for the whole chain -- resolving that needs dataflow
+        analysis this adapter does not attempt, the same boundary
+        documented on the Python side's ``core.context_features``.
+        """
+        if node.type == 'string':
+            fragment = self._string_fragment(node)
+            return self.text(fragment) if fragment is not None else ''
+        if node.type == 'binary_expression':
+            operator = node.child_by_field_name('operator')
+            left = node.child_by_field_name('left')
+            right = node.child_by_field_name('right')
+            if operator is None or self.text(operator) != '+':
+                return None
+            if left is None or right is None:
+                return None
+            left_text = self._flatten_concat(left)
+            right_text = self._flatten_concat(right)
+            if left_text is not None and right_text is not None:
+                return left_text + right_text
+        return None
+
+    def _handle_binary_concat(self, node) -> None:
+        """
+        Classify a ``+``-concatenated string chain as a whole.
+
+        A credential built from adjacent literal fragments carries no name
+        signal at all -- there is no binding for ``_propagate`` to inherit
+        from -- so whole-chain value-shape detection is the only signal
+        available.
+        """
+        from core.secret_detector import is_secret_value
+
+        flattened = self._flatten_concat(node)
+        if not flattened or not is_secret_value(flattened):
+            return
+
+        for leaf in self._literal_nodes(node):
+            self.inherited[leaf.id] = 'SECRET'
+
     def collect_credential_templates(self, node) -> None:
         """
         Record the names that fill a placeholder in a credential template.
@@ -628,6 +683,8 @@ class _Collector:
             self._handle_require(node)
         elif node.type == 'template_string':
             self._handle_template(node)
+        elif node.type == 'binary_expression':
+            self._handle_binary_concat(node)
 
         self._propagate(node)
 

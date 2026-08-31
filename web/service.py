@@ -40,9 +40,14 @@ abstract code, not the vault, not the privacy report, not the reconstructed
 feedback, and not the provider payload.
 """
 
+import json
 import os
 import re
+import subprocess
+import sys
+import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -64,7 +69,9 @@ from llm.base import TASK_PROMPTS, build_prompt
 from storage import audit_log
 from storage.session_manager import (
     delete_session,
+    get_stats_summary,
     list_sessions,
+    list_sessions_for_stats,
     load_session,
     save_session,
 )
@@ -254,6 +261,7 @@ class VaultEntry:
     detector: str
     confidence: float
     masked: bool
+    signals: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -266,6 +274,7 @@ class VaultEntry:
             'detector': self.detector,
             'confidence': round(self.confidence, 2),
             'masked': self.masked,
+            'signals': self.signals,
         }
 
 
@@ -355,8 +364,65 @@ class ReviewOutcome:
 # The pipeline
 # ═══════════════════════════════════════════════════════════
 
-def _build_vault(view: Dict[str, Dict], reveal: bool) -> List[VaultEntry]:
-    """Turn a mapping table into vault rows, ordered by where they appear."""
+def _explain_signals(name: str, node_type: str) -> Dict[str, Any]:
+    """
+    Why CLASSIFY might have called this token SECRET/VALUE/IDENTIFIER.
+
+    Reuses the same hand-crafted shape features the Random Forest baseline
+    trains on (see ``ml/features.py``) — length, entropy, casing, digit
+    ratio — rather than the regex match itself, which is the whole point
+    of that feature set: it describes what a name *looks like*, not which
+    pattern matched it, so the explanation still means something for a
+    token no shipped pattern was written for.
+
+    Computed from the name whether or not the caller is allowed to see it
+    unmasked: a shape descriptor (entropy, length, casing) is not the
+    secret's value, the same way ``confidence`` and ``occurrences`` are
+    already shown for a masked SECRET row elsewhere in this module.
+
+    Returns an empty dict if ``ml.features`` cannot be imported at all,
+    which should not happen — it has no optional dependency — but a
+    display-only panel is not worth failing the request over.
+    """
+    try:
+        from ml.features import extract_features
+    except Exception:                               # pragma: no cover - defensive
+        return {}
+
+    try:
+        values = extract_features(name or '', node_type or 'Name')
+        length, _, _, digit_ratio, _, upper_ratio, screaming, snake, camel = values[:9]
+        entropy = values[10]
+        has_url = values[25]
+        return {
+            'length': int(length),
+            'entropy': round(float(entropy), 2),
+            'digit_ratio': round(float(digit_ratio), 2),
+            'upper_ratio': round(float(upper_ratio), 2),
+            'case_style': (
+                'SCREAMING_CASE' if screaming else
+                'snake_case' if snake else
+                'camelCase' if camel else
+                'mixed'
+            ),
+            'looks_like_url': bool(has_url),
+        }
+    except Exception:                               # pragma: no cover - defensive
+        return {}
+
+
+def _build_vault(
+    mapping_table: Dict[str, Dict], view: Dict[str, Dict], reveal: bool,
+) -> List[VaultEntry]:
+    """
+    Turn a mapping table into vault rows, ordered by where they appear.
+
+    Args:
+        mapping_table: The *real*, unmasked table — used only to compute
+            the shape signals below, never to display a name ``view``
+            would otherwise mask.
+        view: The table to display — masked unless ``reveal``.
+    """
     entries = [
         VaultEntry(
             token=token,
@@ -368,6 +434,10 @@ def _build_vault(view: Dict[str, Dict], reveal: bool) -> List[VaultEntry]:
             detector=str(entry.get('detector', 'unspecified')),
             confidence=float(entry.get('confidence', 1.0)),
             masked=(entry.get('label') == 'SECRET' and not reveal),
+            signals=_explain_signals(
+                str(mapping_table.get(token, entry).get('name', '')),
+                str(mapping_table.get(token, entry).get('node_type', 'Name')),
+            ),
         )
         for token, entry in view.items()
     ]
@@ -383,6 +453,7 @@ def run_abstraction(
     keep_comments: bool = False,
     reveal: bool = False,
     save: bool = True,
+    user_id: Optional[int] = None,
 ) -> AbstractionOutcome:
     """
     ABSTRACT(S, k) for a browser submission.
@@ -395,6 +466,8 @@ def run_abstraction(
         keep_comments: Re-inject screened comments (stripped by default).
         reveal: Show secret values unmasked. Off by default.
         save: Persist the session, so a later translate can resolve tokens.
+        user_id: Owning web account, so it only ever appears in that
+            account's session list.
 
     Returns:
         An :class:`AbstractionOutcome`.
@@ -453,14 +526,14 @@ def run_abstraction(
         abstract_code=result.abstract_code,
         statistics=dict(result.statistics),
         line_map=dict(result.line_map),
-        vault=_build_vault(view, reveal),
+        vault=_build_vault(mapping_table, view, reveal),
         report=report,
         view_mapping=view,
         secrets_masked=not reveal,
     )
 
     if save:
-        _persist(result, outcome)
+        _persist(result, outcome, user_id=user_id)
 
     if audit_log.logging_enabled():
         try:
@@ -473,6 +546,7 @@ def run_abstraction(
                 privacy_level=level,
                 statistics=result.statistics,
                 language=result.language,
+                user_id=user_id,
             )
         except OSError:
             # An unwritable log must not lose the user their abstraction.
@@ -483,7 +557,7 @@ def run_abstraction(
     return outcome
 
 
-def _persist(result, outcome: AbstractionOutcome) -> None:
+def _persist(result, outcome: AbstractionOutcome, user_id: Optional[int] = None) -> None:
     """Save the session, recording rather than raising on failure."""
     try:
         save_session(
@@ -495,6 +569,7 @@ def _persist(result, outcome: AbstractionOutcome) -> None:
             statistics=result.statistics,
             line_map=result.line_map,
             language=result.language,
+            user_id=user_id,
         )
         outcome.saved = True
     except Exception as exc:
@@ -506,6 +581,7 @@ def run_translation(
     session_id: str,
     response_text: str,
     reveal: bool = False,
+    user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     RECONSTRUCT(R, M̃, K) against a stored session.
@@ -514,6 +590,7 @@ def run_translation(
         session_id: Full ID or unambiguous prefix.
         response_text: The LLM's answer, in tokens.
         reveal: Show secret values unmasked in the restored text.
+        user_id: Restrict the lookup to this account's own sessions.
 
     Returns:
         ``{'session_id', 'filename', 'language', 'text', 'view_mapping', …}``.
@@ -525,7 +602,7 @@ def run_translation(
     if not text:
         raise WebServiceError("No LLM response was submitted.")
 
-    session = _load(session_id)
+    session = _load(session_id, user_id=user_id)
     mapping_table = decrypt_mapping(
         session['encrypted_mapping'], session['encryption_key'],
     )
@@ -572,6 +649,7 @@ def run_review(
     reveal: bool = False,
     save: bool = True,
     client=None,
+    user_id: Optional[int] = None,
 ) -> ReviewOutcome:
     """
     Abstract → LLM → Reconstruct, driven from the browser.
@@ -611,6 +689,7 @@ def run_review(
         keep_comments=keep_comments,
         reveal=reveal,
         save=save,
+        user_id=user_id,
     )
 
     # The question names the very things the code just stopped naming, so
@@ -660,6 +739,7 @@ def run_review(
                 language=outcome.language,
                 task=None if question else chosen_task,
                 free_form_query=bool(question),
+                user_id=user_id,
             )
         except OSError:
             pass
@@ -673,7 +753,7 @@ def run_review(
 
     if outcome.saved:
         mapped = run_translation(
-            outcome.session_id, response.content, reveal=reveal,
+            outcome.session_id, response.content, reveal=reveal, user_id=user_id,
         )['text']
     else:
         mapped = _reconstruct_in_memory(
@@ -769,13 +849,13 @@ def _rewrite_session_mapping(outcome: AbstractionOutcome, mapping_table: Dict) -
 # Sessions
 # ═══════════════════════════════════════════════════════════
 
-def _load(session_id: str) -> Dict[str, Any]:
+def _load(session_id: str, user_id: Optional[int] = None) -> Dict[str, Any]:
     """Load a session, translating storage errors into HTTP-shaped ones."""
     key = (session_id or '').strip()
     if not key:
         raise WebServiceError("A session ID is required.")
     try:
-        return load_session(key)
+        return load_session(key, user_id=user_id)
     except ValueError as exc:
         # "no such session" is 404; an ambiguous prefix is 409, because the
         # sessions exist and the client under-specified which one it meant.
@@ -783,7 +863,7 @@ def _load(session_id: str) -> Dict[str, Any]:
         raise WebServiceError(str(exc), status=status)
 
 
-def recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
+def recent_sessions(limit: int = 20, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """Recent sessions, newest first, with no mapping material in them."""
     try:
         bound = max(1, min(int(limit), 200))
@@ -800,13 +880,15 @@ def recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
             'context_window': row.get('context_window', 3),
             'statistics': row.get('statistics', {}),
         }
-        for row in list_sessions(limit=bound)
+        for row in list_sessions(limit=bound, user_id=user_id)
     ]
 
 
-def session_detail(session_id: str, reveal: bool = False) -> Dict[str, Any]:
+def session_detail(
+    session_id: str, reveal: bool = False, user_id: Optional[int] = None,
+) -> Dict[str, Any]:
     """One session's metadata and its vault, masked by default."""
-    session = _load(session_id)
+    session = _load(session_id, user_id=user_id)
     mapping_table = decrypt_mapping(
         session['encrypted_mapping'], session['encryption_key'],
     )
@@ -819,15 +901,17 @@ def session_detail(session_id: str, reveal: bool = False) -> Dict[str, Any]:
         'language': session.get('language', 'python'),
         'context_window': session.get('context_window', 3),
         'statistics': session.get('statistics', {}),
-        'vault': [entry.to_dict() for entry in _build_vault(view, reveal)],
+        'vault': [
+            entry.to_dict() for entry in _build_vault(mapping_table, view, reveal)
+        ],
         'secrets_masked': not reveal,
     }
 
 
-def remove_session(session_id: str) -> Dict[str, Any]:
+def remove_session(session_id: str, user_id: Optional[int] = None) -> Dict[str, Any]:
     """Delete a session and its key."""
-    session = _load(session_id)
-    deleted = delete_session(session['session_id'])
+    session = _load(session_id, user_id=user_id)
+    deleted = delete_session(session['session_id'], user_id=user_id)
     return {'session_id': session['session_id'], 'deleted': bool(deleted)}
 
 
@@ -888,3 +972,246 @@ def privacy_options() -> List[Dict[str, Any]]:
 def task_options() -> List[str]:
     """Preset task names the review endpoint accepts."""
     return sorted(TASK_PROMPTS)
+
+
+# ═══════════════════════════════════════════════════════════
+# Dashboard
+# ═══════════════════════════════════════════════════════════
+
+DASHBOARD_ACTIVITY_DAYS = 14
+
+
+def dashboard_stats(user_id: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Aggregate numbers for the Dashboard page.
+
+    Everything here is derived from what a session row already stores
+    (language, timestamp, the ABSTRACT statistics dict) — no new tracking
+    table whose counts could drift from the sessions it describes.
+    """
+    summary = get_stats_summary(user_id=user_id)
+    rows = list_sessions_for_stats(user_id=user_id)
+
+    language_counts: Dict[str, int] = {}
+    daily_sessions: Dict[str, int] = {}
+    daily_secrets: Dict[str, int] = {}
+
+    for row in rows:
+        language_counts[row['language']] = language_counts.get(row['language'], 0) + 1
+
+        day = str(row.get('created_at', ''))[:10]
+        if day:
+            daily_sessions[day] = daily_sessions.get(day, 0) + 1
+            daily_secrets[day] = (
+                daily_secrets.get(day, 0) + row['statistics'].get('secrets_found', 0)
+            )
+
+    # Zero-filled over a fixed window, oldest first — a chart should not
+    # have to guess whether a missing day means "no runs" or "no data".
+    today = datetime.now(timezone.utc).date()
+    activity = [
+        {
+            'date': (day := (today - timedelta(days=offset)).isoformat()),
+            'sessions': daily_sessions.get(day, 0),
+            'secrets': daily_secrets.get(day, 0),
+        }
+        for offset in range(DASHBOARD_ACTIVITY_DAYS - 1, -1, -1)
+    ]
+
+    return {
+        'total_sessions': summary['total_sessions'],
+        'total_secrets_found': summary['total_secrets_found'],
+        'total_values_found': summary['total_values_found'],
+        'total_abstractions': summary['total_abstractions'],
+        'earliest_session': summary['earliest_session'],
+        'latest_session': summary['latest_session'],
+        'language_breakdown': [
+            {'language': lang, 'count': count}
+            for lang, count in sorted(language_counts.items(), key=lambda kv: -kv[1])
+        ],
+        'activity': activity,
+        'recent_sessions': recent_sessions(limit=8, user_id=user_id),
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit log (Insights page)
+# ═══════════════════════════════════════════════════════════
+
+def audit_overview(user_id: Optional[int] = None, limit: int = 200) -> Dict[str, Any]:
+    """
+    Data for the Insights page's Audit Log tab.
+
+    The log itself is one whole-machine file (see :mod:`storage.audit_log`),
+    written by the CLI and every web account alike, and the **chain
+    verification always covers every entry in it** — tamper-evidence is a
+    property of the whole file, and checking only one account's slice
+    would miss a modification to somebody else's entries.
+
+    The **entry table**, though, is scoped to ``user_id`` when given: only
+    entries this function itself tagged with that account (see
+    ``run_abstraction``/``run_review``'s ``user_id`` argument, and
+    :func:`storage.audit_log.record_abstraction` /
+    :func:`record_request`) are returned. CLI entries carry no ``user_id``
+    at all and so belong to no account's view here — ``codeabstract audit
+    list`` is the tool for "everything on this machine"; this page is
+    "what my account has sent."
+    """
+    all_entries = audit_log.read_entries()
+    verification = audit_log.verify_chain()
+
+    if user_id is None:
+        scoped = all_entries
+    else:
+        scoped = [entry for entry in all_entries if entry.get('user_id') == user_id]
+
+    tail = scoped[-limit:] if limit else scoped
+    return {
+        'entries': list(reversed(tail)),
+        'total_entries': len(scoped),
+        'chain_ok': verification.ok,
+        'chain_summary': verification.summary(),
+        'chain_problems': verification.problems,
+        'log_path': str(audit_log.audit_log_path()),
+        'logging_enabled': audit_log.logging_enabled(),
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Evaluation benchmarks (Insights page)
+# ═══════════════════════════════════════════════════════════
+
+EVALUATION_RESULTS_PATH = (
+    Path(__file__).resolve().parents[1] / 'evaluation_output' / 'evaluation_results.json'
+)
+
+
+def benchmark_summary() -> Dict[str, Any]:
+    """
+    Data for the Insights page's Benchmarks tab.
+
+    Reads whatever ``evaluation/run_eval.py`` last wrote to
+    ``evaluation_output/evaluation_results.json`` instead of re-running the
+    suite on a page load: its performance pillar alone times abstraction
+    across a range of synthetic file sizes, which has no place on a
+    request's critical path. Refreshing the numbers is a deliberate,
+    offline step — the same one that produces the paper tables the suite
+    was built for.
+    """
+    if not EVALUATION_RESULTS_PATH.is_file():
+        return {'available': False, 'path': str(EVALUATION_RESULTS_PATH)}
+
+    try:
+        with open(EVALUATION_RESULTS_PATH, 'r', encoding='utf-8') as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {'available': False, 'path': str(EVALUATION_RESULTS_PATH)}
+
+    meta = data.get('meta', {})
+    privacy = data.get('pillar_1_privacy', {})
+    reconstruction = data.get('pillar_2_reconstruction', {})
+    classification = data.get('pillar_3_classification', {})
+    structure = data.get('pillar_4_structure', {})
+    performance = data.get('pillar_5_performance', {})
+    mapping = data.get('pillar_6_mapping', {})
+
+    return {
+        'available': True,
+        'timestamp': meta.get('timestamp', ''),
+        'privacy_level': meta.get('privacy_level', ''),
+        'files_evaluated': meta.get('files_evaluated', 0),
+        'privacy': {
+            'mean_pir': privacy.get('mean_pir', 0),
+            'mean_secret_leakage_rate': privacy.get('mean_secret_leakage_rate', 0),
+            'mean_value_leakage_rate': privacy.get('mean_value_leakage_rate', 0),
+            'mean_identifier_leakage_rate': privacy.get('mean_identifier_leakage_rate', 0),
+            'syntax_validity_rate': privacy.get('syntax_validity_rate', 0),
+        },
+        'reconstruction': {
+            'mean_token_hit_rate': reconstruction.get('mean_token_hit_rate', 0),
+            'mean_roundtrip_fidelity': reconstruction.get('mean_roundtrip_fidelity', 0),
+            'mean_reconstruction_rate': reconstruction.get('mean_reconstruction_rate', 0),
+        },
+        'classification': {
+            'overall_accuracy': classification.get('overall_accuracy', 0),
+            'macro_f1': classification.get('macro_f1', 0),
+            'per_class': classification.get('per_class', {}),
+        },
+        'structure': {
+            'mean_ast_isomorphism': structure.get('mean_ast_isomorphism', 0),
+            'mean_token_ratio': structure.get('mean_token_ratio', 0),
+        },
+        'performance': {
+            'mean_abstraction_time_ms': performance.get('mean_abstraction_time_ms', 0),
+            'mean_throughput_loc_per_sec': performance.get('mean_throughput_loc_per_sec', 0),
+            'scaling_curve': performance.get('scaling_curve', []),
+        },
+        'mapping': {
+            'mean_mapping_accuracy': mapping.get('mean_mapping_accuracy', 0),
+            'mean_shadow_resolution': mapping.get('mean_shadow_resolution', 0),
+        },
+    }
+
+
+# A lock, not just a flag: two "Run now" clicks racing each other would
+# otherwise both spawn ``run_eval.py`` at once, and two processes writing
+# ``evaluation_results.json`` at the same time can interleave into a
+# corrupt file. Module-level and process-wide, which is exactly the scope
+# a single ``codeabstract web`` process needs.
+_BENCHMARK_RUN_LOCK = threading.Lock()
+
+# The performance pillar alone benchmarks abstraction across a range of
+# synthetic file sizes and is the slowest of the seven by a wide margin
+# (see its own module) -- skipped here so a manual "Run now" click from the
+# Insights page finishes in a few seconds instead of tying up the request
+# for however long that pillar takes on the machine it happens to run on.
+# `python evaluation/run_eval.py` without this flag remains how the full
+# suite, performance pillar included, gets produced for the paper tables.
+_BENCHMARK_RUN_ARGS = ['--skip-performance', '--no-terminal']
+
+
+def run_benchmarks_now(timeout_seconds: float = 60.0) -> Dict[str, Any]:
+    """
+    Re-run the evaluation suite synchronously and return the refreshed
+    summary, for the Insights page's "Run now" button.
+
+    Runs `evaluation/run_eval.py` as a subprocess rather than importing and
+    calling its pillars in-process: that script owns its own Rich console
+    and progress bars and was written as a standalone entry point, not a
+    library call -- shelling out to the exact command a person would type
+    themselves is what keeps this from drifting out of sync with it.
+
+    Returns:
+        ``{'ok': True, **benchmark_summary()}`` on success, or
+        ``{'ok': False, 'error': ...}`` — never raises for an ordinary
+        evaluation failure, only for something this function did not
+        anticipate.
+    """
+    acquired = _BENCHMARK_RUN_LOCK.acquire(blocking=False)
+    if not acquired:
+        return {'ok': False, 'error': 'A benchmark run is already in progress.'}
+
+    try:
+        repo_root = Path(__file__).resolve().parents[1]
+        script = repo_root / 'evaluation' / 'run_eval.py'
+        output_dir = EVALUATION_RESULTS_PATH.parent
+
+        result = subprocess.run(
+            [sys.executable, str(script), *_BENCHMARK_RUN_ARGS, '--output', str(output_dir)],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return {'ok': False, 'error': f'Evaluation did not finish within {timeout_seconds:.0f}s.'}
+    except OSError as exc:
+        return {'ok': False, 'error': f'Could not start the evaluation suite: {exc}'}
+    finally:
+        _BENCHMARK_RUN_LOCK.release()
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or '').strip()[-2000:]
+        return {'ok': False, 'error': detail or f'Exited with status {result.returncode}.'}
+
+    return {'ok': True, **benchmark_summary()}

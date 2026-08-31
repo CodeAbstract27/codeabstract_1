@@ -2,10 +2,11 @@
 Tests for the ``codeabstract web`` command.
 
 The command's one real decision is the bind address, and it is a decision
-worth a test rather than a comment. Nothing in the web app authenticates a
-caller: on loopback that matches the CLI's own trust boundary, and on any
-other interface it publishes every stored session's mapping table to
-whoever can reach the port.
+worth a test rather than a comment. Accounts scope one signed-in user's
+sessions away from another's, but do not gate the port itself: on loopback
+that is still the CLI's own trust boundary, and on any other interface a
+stranger can reach in, sign up, spend the operator's configured LLM
+provider quota, and read any session nobody ever signed into.
 """
 
 import pytest
@@ -52,7 +53,11 @@ class TestBindGuard:
 
         message = capsys.readouterr().out
         assert '--expose' in message
-        assert 'authentication' in message.lower()
+        # Accounts scope one signed-in user's sessions from another's, but
+        # do not gate who can reach the port at all -- the refusal has to
+        # say so, not lean on the stale claim that nothing here is
+        # authenticated.
+        assert 'account' in message.lower()
 
     def test_expose_overrides_the_guard(self, monkeypatch):
         """With ``--expose`` the command proceeds — the user was asked."""
@@ -121,6 +126,71 @@ class TestConfigPassthrough:
 
         assert captured['SAVE_SESSIONS'] is True
         assert captured['ALLOW_REVEAL'] is False
+
+
+class TestTlsFlag:
+    def test_warns_when_exposed_without_tls(self, capsys, monkeypatch):
+        class FakeApp:
+            config = {}
+
+            def run(self, host, port, debug):
+                pass
+
+        monkeypatch.setattr(
+            'web.create_app', lambda config=None: FakeApp(), raising=True,
+        )
+        run_web(host='0.0.0.0', expose=True, tls=False)
+
+        message = capsys.readouterr().out
+        assert 'plain http' in message.lower() or 'plaintext' in message.lower() or '--tls' in message
+
+    def test_no_plaintext_warning_when_tls_is_on(self, capsys, monkeypatch):
+        class FakeApp:
+            config = {}
+
+            def run(self, host, port, debug, ssl_context=None):
+                assert ssl_context == 'adhoc'
+
+        monkeypatch.setattr(
+            'web.create_app', lambda config=None: FakeApp(), raising=True,
+        )
+        run_web(host='0.0.0.0', expose=True, tls=True)
+
+        message = capsys.readouterr().out
+        assert 'https' in message.lower()
+
+    def test_no_plaintext_warning_on_loopback(self, capsys, monkeypatch):
+        class FakeApp:
+            config = {}
+
+            def run(self, host, port, debug):
+                pass
+
+        monkeypatch.setattr(
+            'web.create_app', lambda config=None: FakeApp(), raising=True,
+        )
+        run_web(host='127.0.0.1', tls=False)
+
+        message = capsys.readouterr().out
+        assert '--tls' not in message
+
+    def test_ssl_context_only_passed_when_tls_requested(self, monkeypatch):
+        """A caller whose fake app doesn't accept ssl_context must not break
+        when --tls was never asked for -- see the ssl_context bug this
+        guards against, caught by the pre-existing FakeApp fixtures above."""
+        started = {}
+
+        class FakeApp:
+            config = {}
+
+            def run(self, host, port, debug):
+                started.update(host=host, port=port, debug=debug)
+
+        monkeypatch.setattr(
+            'web.create_app', lambda config=None: FakeApp(), raising=True,
+        )
+        run_web(host='127.0.0.1', tls=False)
+        assert started['host'] == '127.0.0.1'
 
 
 class TestCliRegistration:

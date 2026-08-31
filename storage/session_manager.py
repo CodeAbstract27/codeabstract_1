@@ -58,6 +58,28 @@ def _resolve_key(row: sqlite3.Row) -> bytes:
     )
 
 
+def _owner_clause(user_id: Optional[int], prefix: str = "WHERE") -> tuple:
+    """
+    A ``WHERE``/``AND`` fragment that always scopes by ownership.
+
+    ``user_id=None`` means "the anonymous web visitor, or the CLI" and
+    filters to ``user_id IS NULL`` — *never* "every session regardless of
+    owner". Every session the CLI has ever written has a NULL owner, so a
+    CLI-only database sees the same rows either way; what this actually
+    changes is that a signed-out web visitor can no longer see a signed-in
+    account's sessions by asking for "no owner" and getting everyone's.
+    That gap was caught by hand-testing the login feature end to end: a
+    logged-out ``/api/sessions`` call returned another account's session.
+
+    Args:
+        prefix: ``"WHERE"`` for a fresh clause, ``"AND"`` to append to one
+            that already has a ``WHERE session_id = ?`` in it.
+    """
+    if user_id is None:
+        return f"{prefix} user_id IS NULL", ()
+    return f"{prefix} user_id = ?", (user_id,)
+
+
 def _load_line_map(row: sqlite3.Row) -> Dict[int, int]:
     """
     Read the line index off a session row.
@@ -89,6 +111,7 @@ def save_session(
     statistics: Dict[str, Any] = None,
     line_map: Dict[int, int] = None,
     language: str = "python",
+    user_id: Optional[int] = None,
 ) -> None:
     """
     Persist a new session to the database.
@@ -107,6 +130,10 @@ def save_session(
         line_map: Optional abstract-to-original line index (Phase 1), used
             by RECONSTRUCT to translate the LLM's line citations.
         language: Language adapter that produced the abstraction (Phase 4).
+        user_id: Owning web account, if any. The CLI never passes one, so
+            its sessions are stored with no owner — visible to any other
+            caller that also passes no ``user_id`` (see :func:`_owner_clause`),
+            never to a signed-in web account.
 
     Raises:
         KeyStoreError: If the key cannot be stored. The session is *not*
@@ -126,8 +153,8 @@ def save_session(
             INSERT INTO sessions
                 (session_id, source_file_path, context_window,
                  encrypted_mapping, encryption_key, statistics_json,
-                 line_map_json, key_ref, language)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 line_map_json, key_ref, language, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 session_id,
@@ -139,6 +166,7 @@ def save_session(
                 line_map_json,
                 key_ref,
                 language,
+                user_id,
             ),
         )
         conn.commit()
@@ -151,12 +179,17 @@ def save_session(
         conn.close()
 
 
-def load_session(session_id: str) -> Dict[str, Any]:
+def load_session(session_id: str, user_id: Optional[int] = None) -> Dict[str, Any]:
     """
     Load a session by its ID (supports prefix matching).
 
     Args:
         session_id: Full or prefix of the session UUID.
+        user_id: When given, the session must belong to this account or it
+            is treated as not found — a web caller must never learn that a
+            session belonging to a *different* account exists, so a
+            cross-user lookup raises the same error as a missing one
+            rather than a distinguishable "not yours" error.
 
     Returns:
         Dict with keys: session_id, source_file_path, created_at,
@@ -164,22 +197,25 @@ def load_session(session_id: str) -> Dict[str, Any]:
         line_map.
 
     Raises:
-        ValueError: If no matching session is found.
+        ValueError: If no matching session is found (or none owned by
+            ``user_id``, when given).
         ValueError: If the prefix is ambiguous (matches multiple sessions).
     """
     conn = get_connection()
     try:
+        owner_clause, owner_params = _owner_clause(user_id, prefix="AND")
+
         # Try exact match first
         row = conn.execute(
-            "SELECT * FROM sessions WHERE session_id = ?",
-            (session_id,),
+            f"SELECT * FROM sessions WHERE session_id = ? {owner_clause}",
+            (session_id, *owner_params),
         ).fetchone()
 
         if row is None:
             # Try prefix match
             rows = conn.execute(
-                "SELECT * FROM sessions WHERE session_id LIKE ?",
-                (f"{session_id}%",),
+                f"SELECT * FROM sessions WHERE session_id LIKE ? {owner_clause}",
+                (f"{session_id}%", *owner_params),
             ).fetchall()
 
             if len(rows) == 0:
@@ -209,27 +245,32 @@ def load_session(session_id: str) -> Dict[str, Any]:
         conn.close()
 
 
-def list_sessions(limit: int = 20) -> List[Dict[str, Any]]:
+def list_sessions(limit: int = 20, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     List recent sessions, ordered by creation time (newest first).
 
     Args:
         limit: Maximum number of sessions to return.
+        user_id: When given, only this account's sessions; otherwise only
+            sessions with no owner (every CLI-written session, and any web
+            session created while signed out).
 
     Returns:
         List of session summary dicts.
     """
     conn = get_connection()
     try:
+        owner_clause, owner_params = _owner_clause(user_id)
         rows = conn.execute(
-            """
+            f"""
             SELECT session_id, source_file_path, created_at,
-                   context_window, statistics_json
+                   context_window, statistics_json, language
             FROM sessions
-            ORDER BY created_at DESC
+            {owner_clause}
+            ORDER BY created_at DESC, rowid DESC
             LIMIT ?
             """,
-            (limit,),
+            (*owner_params, limit),
         ).fetchall()
 
         return [
@@ -239,6 +280,7 @@ def list_sessions(limit: int = 20) -> List[Dict[str, Any]]:
                 'created_at': row['created_at'],
                 'context_window': row['context_window'],
                 'statistics': json.loads(row['statistics_json'] or '{}'),
+                'language': _column(row, 'language', 'python'),
             }
             for row in rows
         ]
@@ -246,12 +288,16 @@ def list_sessions(limit: int = 20) -> List[Dict[str, Any]]:
         conn.close()
 
 
-def delete_session(session_id: str) -> bool:
+def delete_session(session_id: str, user_id: Optional[int] = None) -> bool:
     """
     Delete a session by ID (supports prefix matching).
 
     Args:
         session_id: Full or prefix UUID.
+        user_id: When given, only a session owned by this account may be
+            deleted; anything else is reported as not found (see
+            :func:`load_session` for why that error is not distinguishable
+            from "does not exist").
 
     Returns:
         True if a session was deleted, False otherwise.
@@ -261,18 +307,20 @@ def delete_session(session_id: str) -> bool:
     """
     conn = get_connection()
     try:
+        owner_clause, owner_params = _owner_clause(user_id, prefix="AND")
+
         # Resolve to exactly one session first, so that the key and the row
         # are removed together.  Phase 4: deleting the row alone would leave
         # the key behind in the OS keychain forever.
         rows = conn.execute(
-            "SELECT session_id, key_ref FROM sessions WHERE session_id = ?",
-            (session_id,),
+            f"SELECT session_id, key_ref FROM sessions WHERE session_id = ? {owner_clause}",
+            (session_id, *owner_params),
         ).fetchall()
 
         if not rows:
             rows = conn.execute(
-                "SELECT session_id, key_ref FROM sessions WHERE session_id LIKE ?",
-                (f"{session_id}%",),
+                f"SELECT session_id, key_ref FROM sessions WHERE session_id LIKE ? {owner_clause}",
+                (f"{session_id}%", *owner_params),
             ).fetchall()
 
         if len(rows) == 0:
@@ -295,19 +343,22 @@ def delete_session(session_id: str) -> bool:
         conn.close()
 
 
-def get_session_count() -> int:
-    """Return the total number of sessions stored."""
+def get_session_count(user_id: Optional[int] = None) -> int:
+    """Return the total number of sessions stored (optionally, for one account)."""
     conn = get_connection()
     try:
-        row = conn.execute("SELECT COUNT(*) as cnt FROM sessions").fetchone()
+        owner_clause, owner_params = _owner_clause(user_id)
+        row = conn.execute(
+            f"SELECT COUNT(*) as cnt FROM sessions {owner_clause}", owner_params
+        ).fetchone()
         return row['cnt']
     finally:
         conn.close()
 
 
-def get_stats_summary() -> Dict[str, Any]:
+def get_stats_summary(user_id: Optional[int] = None) -> Dict[str, Any]:
     """
-    Return aggregate statistics across all sessions.
+    Return aggregate statistics across sessions (optionally, for one account).
 
     Returns:
         Dict with total_sessions, total_secrets_found, total_values_found,
@@ -315,19 +366,22 @@ def get_stats_summary() -> Dict[str, Any]:
     """
     conn = get_connection()
     try:
+        owner_clause, owner_params = _owner_clause(user_id)
         row = conn.execute(
-            """
+            f"""
             SELECT
                 COUNT(*) as total_sessions,
                 MIN(created_at) as earliest,
                 MAX(created_at) as latest
             FROM sessions
-            """
+            {owner_clause}
+            """,
+            owner_params,
         ).fetchone()
 
         # Aggregate stats from statistics_json
         rows = conn.execute(
-            "SELECT statistics_json FROM sessions"
+            f"SELECT statistics_json FROM sessions {owner_clause}", owner_params
         ).fetchall()
 
         total_secrets = 0
@@ -348,5 +402,38 @@ def get_stats_summary() -> Dict[str, Any]:
             'total_values_found': total_values,
             'total_abstractions': total_abstractions,
         }
+    finally:
+        conn.close()
+
+
+def list_sessions_for_stats(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    Every session's language, creation timestamp and statistics.
+
+    Unlike :func:`list_sessions` this has no ``limit`` — the Dashboard
+    needs the full history to bucket activity by day and language, not
+    just the most recent page of it.
+    """
+    conn = get_connection()
+    try:
+        owner_clause, owner_params = _owner_clause(user_id)
+        rows = conn.execute(
+            f"""
+            SELECT created_at, language, statistics_json, context_window
+            FROM sessions
+            {owner_clause}
+            ORDER BY created_at ASC
+            """,
+            owner_params,
+        ).fetchall()
+        return [
+            {
+                'created_at': row['created_at'],
+                'language': _column(row, 'language', 'python'),
+                'statistics': json.loads(row['statistics_json'] or '{}'),
+                'context_window': row['context_window'],
+            }
+            for row in rows
+        ]
     finally:
         conn.close()

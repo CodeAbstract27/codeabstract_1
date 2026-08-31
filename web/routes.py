@@ -24,6 +24,7 @@ from typing import Any, Dict, Optional
 from flask import Blueprint, current_app, jsonify, render_template, request
 
 from web import highlight, service
+from web.auth import current_user_id, login_required
 from web.service import WebServiceError
 
 ui = Blueprint('ui', __name__)
@@ -131,7 +132,35 @@ def index():
 @ui.get('/sessions')
 def sessions_page():
     """Recent sessions, and the pane that translates a response into one."""
-    return render_template('sessions.html', sessions=service.recent_sessions(50))
+    return render_template(
+        'sessions.html', sessions=service.recent_sessions(50, user_id=current_user_id()),
+    )
+
+
+@ui.get('/dashboard')
+@login_required
+def dashboard():
+    """
+    Overview for a signed-in account: totals, activity, language mix.
+
+    Login-gated because "your activity" has no meaning for an anonymous
+    caller — unlike the Workbench and Sessions pages, which keep working
+    signed out exactly as they did before accounts existed (a session
+    created while signed out just has no owner, the same as every session
+    the CLI has ever written).
+    """
+    return render_template('dashboard.html', stats=service.dashboard_stats(current_user_id()))
+
+
+@ui.get('/insights')
+@login_required
+def insights():
+    """Audit-log integrity and evaluation-suite benchmarks, in one page."""
+    return render_template(
+        'insights.html',
+        audit=service.audit_overview(user_id=current_user_id()),
+        benchmarks=service.benchmark_summary(),
+    )
 
 
 @ui.get('/health')
@@ -191,6 +220,7 @@ def api_abstract():
         keep_comments=flag(payload, 'keep_comments'),
         reveal=reveal_allowed(payload),
         save=save_sessions(),
+        user_id=current_user_id(),
     )
 
     data = outcome.to_dict()
@@ -216,6 +246,7 @@ def api_review():
         reveal=reveal_allowed(payload),
         save=save_sessions(),
         client=current_app.config.get('LLM_CLIENT'),
+        user_id=current_user_id(),
     )
 
     data = outcome.to_dict()
@@ -239,6 +270,7 @@ def api_translate():
         session_id=payload.get('session_id', ''),
         response_text=payload.get('text', ''),
         reveal=reveal_allowed(payload),
+        user_id=current_user_id(),
     )
 
     view = result.pop('view_mapping')
@@ -256,7 +288,9 @@ def api_translate():
 @api.get('/sessions')
 def api_sessions():
     """Recent sessions. Metadata only — no mapping material."""
-    return jsonify({'sessions': service.recent_sessions(request.args.get('limit', 20))})
+    return jsonify({'sessions': service.recent_sessions(
+        request.args.get('limit', 20), user_id=current_user_id(),
+    )})
 
 
 @api.get('/sessions/<session_id>')
@@ -264,14 +298,14 @@ def api_session(session_id: str):
     """One session, with its vault masked."""
     payload = {'reveal': request.args.get('reveal', '')}
     return jsonify(service.session_detail(
-        session_id, reveal=reveal_allowed(payload),
+        session_id, reveal=reveal_allowed(payload), user_id=current_user_id(),
     ))
 
 
 @api.delete('/sessions/<session_id>')
 def api_session_delete(session_id: str):
     """Delete a session and the key that unlocks it."""
-    return jsonify(service.remove_session(session_id))
+    return jsonify(service.remove_session(session_id, user_id=current_user_id()))
 
 
 @api.get('/providers')
@@ -282,6 +316,43 @@ def api_providers():
 @api.get('/languages')
 def api_languages():
     return jsonify({'languages': service.language_options()})
+
+
+@api.get('/audit')
+@login_required
+def api_audit():
+    """Audit-log entries plus a fresh hash-chain verification."""
+    return jsonify(service.audit_overview(user_id=current_user_id()))
+
+
+@api.get('/benchmarks')
+@login_required
+def api_benchmarks():
+    """Whatever ``evaluation/run_eval.py`` last wrote to disk."""
+    return jsonify(service.benchmark_summary())
+
+
+@api.post('/benchmarks/run')
+@login_required
+def api_benchmarks_run():
+    """
+    Re-run the evaluation suite now (skipping the slow performance pillar)
+    and return the refreshed summary, for the Insights page's "Run now"
+    button.
+    """
+    result = service.run_benchmarks_now()
+    if not result.get('ok'):
+        error = result.get('error', 'Evaluation run failed.')
+        status = 409 if 'already in progress' in error else 502
+        return jsonify({'error': error}), status
+    return jsonify(result)
+
+
+@api.get('/dashboard')
+@login_required
+def api_dashboard():
+    """The Dashboard page's numbers, for a client-side refresh."""
+    return jsonify(service.dashboard_stats(current_user_id()))
 
 
 @api.get('/options')

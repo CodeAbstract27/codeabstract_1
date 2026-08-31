@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Sign in — CodeAbstract{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+  <section class="panel auth-panel">
+    <h2>Sign in</h2>
+    <p class="pane-note">
+      Your sessions and dashboard are scoped to your account. The
+      Workbench and Sessions pages still work without one.
+    </p>
+
+    <form id="login-form" novalidate>
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="email" name="email" required autocomplete="username">
+      </label>
+
+      <label class="field">
+        <span>Password</span>
+        <input type="password" id="password" name="password" required
+               autocomplete="current-password">
+      </label>
+
+      <input type="hidden" id="next" value="{{ next }}">
+
+      <div class="actions">
+        <button type="submit" class="primary">Sign in</button>
+      </div>
+
+      <p id="auth-status" class="status" role="status"></p>
+    </form>
+
+    <p class="pane-note">
+      No account? <a href="{{ url_for('auth_ui.signup_page') }}">Sign up</a>.
+    </p>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='auth.js') }}" data-mode="login"></script>
+{% endblock %}

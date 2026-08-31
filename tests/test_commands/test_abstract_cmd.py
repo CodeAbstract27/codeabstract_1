@@ -84,6 +84,23 @@ class TestAbstractCommand:
         finally:
             os.unlink(path)
 
+    def test_abstract_invalid_privacy_level_is_rejected(self):
+        """
+        An unrecognised ``--privacy`` value was silently accepted and
+        passed straight through to the abstraction engine, which falls
+        back to 'medium' for an unknown level -- found by direct
+        adversarial testing. A typo like ``hihg`` (meant to be ``high``)
+        must be refused, not silently downgraded with no indication
+        anything was wrong.
+        """
+        path = self._write_temp_file(SAMPLE_PAYMENT_CODE)
+        try:
+            result = runner.invoke(app, ["abstract", path, "--privacy", "nonsense"])
+            assert result.exit_code != 0
+            assert "not a valid privacy level" in result.output
+        finally:
+            os.unlink(path)
+
     def test_abstract_context_window(self):
         """Custom context window should work."""
         path = self._write_temp_file(SAMPLE_PAYMENT_CODE)

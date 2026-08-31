@@ -475,3 +475,245 @@ class TestL5ConfigExposure:
         from commands.config_cmd import display_value
 
         assert display_value('default_privacy', 'high') == 'high'
+
+
+# ═══════════════════════════════════════════════════════════
+# L7 — a credential split across "+"-concatenated literals
+# ═══════════════════════════════════════════════════════════
+
+class TestL7ConcatenatedSecrets:
+    """
+    ``build_fstring_template`` flattens an f-string's literal fragments
+    into one string before value-shape detection runs, so a credential
+    split between an f-string's literal parts and its interpolations is
+    caught (Phase 0 / D1). ``"sk_live_" + "abc123..."`` is the same attack
+    spelled with ``+`` instead of ``f"..."``, and nothing flattened it: two
+    ``Constant`` leaves of an ``ast.BinOp`` are walked and classified
+    independently, and each one can fall individually below the entropy
+    floor or a vendor prefix's minimum length while the assembled string
+    is a live-looking key. At ``low`` and ``medium`` -- where a plain
+    business VALUE is allowed to survive -- both halves were sent to the
+    LLM as literal text.
+
+    Splitting the fragments across separate variable assignments
+    (``part1 = "..."; part2 = "..."; full = part1 + part2``) was a further,
+    harder gap: it needs a def-use chain, not a node-local check, to
+    connect the concatenation back to where each fragment was assigned.
+    ``core.context_features._single_assignment_constants`` closes the
+    common case with a conservative, whole-module approximation -- a name
+    assigned a literal exactly once anywhere in the module resolves back
+    to that assignment; a name bound more than once anywhere (reassigned,
+    a function parameter, a loop/``with`` target, two different functions
+    sharing a local name) does not, since resolving those without real
+    scope/control-flow analysis risks attributing the wrong value to a
+    later use. See the safety-guard tests below for exactly what that
+    trade-off declines to resolve.
+    """
+
+    @pytest.mark.parametrize('level', ALL_LEVELS)
+    def test_adjacent_literal_stripe_key_never_transmitted(self, level):
+        source = 'value = "sk_live_abc123" + "def456ghi789jkl012"\nprint(value)\n'
+        out = abstracted(source, level)
+        assert 'sk_live_abc123' not in out
+        assert 'def456ghi789jkl012' not in out
+
+    @pytest.mark.parametrize('level', ALL_LEVELS)
+    def test_three_part_concatenation_never_transmitted(self, level):
+        source = 'k = "sk_" + "live_" + "abc123def456ghi789jkl012"\nprint(k)\n'
+        out = abstracted(source, level)
+        assert 'sk_live_abc123def456ghi789jkl012' not in out
+        assert 'abc123def456ghi789jkl012' not in out
+
+    @pytest.mark.parametrize('level', ALL_LEVELS)
+    def test_secret_named_binding_redacts_the_literal_too(self, level):
+        """
+        A password bound to a secret-named target must not merely have its
+        *name* tokenised -- the value itself, split across two literal
+        fragments, must be redacted as well.
+        """
+        source = 'db_pass = "hunter" + "2222"\nprint(db_pass)\n'
+        out = abstracted(source, level)
+        assert 'hunter' not in out
+        assert '2222' not in out
+
+    @pytest.mark.parametrize('level', ALL_LEVELS)
+    def test_percent_style_template_still_redacts(self, level):
+        """Regression guard: the existing ``%``-formatting credential path
+        must be unaffected by the new ``+`` handling."""
+        source = 'x = "db://%s:%s@host" % (user, "hunter2222")\n'
+        assert 'hunter2222' not in abstracted(source, level)
+
+    def test_benign_concatenation_is_not_flagged(self):
+        """String concatenation is common and mostly not a secret --
+        ordinary prose built with ``+`` must not be swept into SECRET."""
+        out = abstracted('greeting = "hello " + "world"\nprint(greeting)\n', 'low')
+        assert "'hello '" in out or 'hello ' in out
+        assert "'world'" in out or 'world' in out
+
+    @pytest.mark.parametrize('level', ALL_LEVELS)
+    def test_concat_across_separately_assigned_variables_redacted(self, level):
+        """
+        When the two fragments are assigned to separate variables first and
+        concatenated later, no single AST node ever carried both literals
+        -- closing this needed ``core.context_features._single_assignment_
+        constants``: a conservative, whole-module (not full dataflow)
+        resolution of a name assigned a literal exactly once, anywhere in
+        the module, back to the node that assigned it. Real, scope- and
+        control-flow-aware dataflow analysis remains out of scope; this
+        closes the common, simple case -- see the safety-guard tests below
+        for what is deliberately still left unresolved.
+        """
+        source = (
+            'part1 = "sk_live_abc123"\n'
+            'part2 = "def456ghi789jkl012"\n'
+            'full = part1 + part2\n'
+            'print(full)\n'
+        )
+        out = abstracted(source, level)
+        assert 'sk_live_abc123' not in out
+        assert 'def456ghi789jkl012' not in out
+
+    def test_concat_across_three_variables_redacted(self):
+        source = (
+            'a = "sk_"\n'
+            'b = "live_"\n'
+            'c = "abc123def456ghi789jkl012"\n'
+            'full = a + b + c\n'
+            'print(full)\n'
+        )
+        out = abstracted(source, 'low')
+        assert 'abc123def456ghi789jkl012' not in out
+
+    def test_reassigned_variable_is_not_resolved(self):
+        """
+        Safety guard: a name assigned more than once anywhere in the
+        module must never be resolved -- doing so risks attributing the
+        *wrong* value to a later use, which is worse than not resolving at
+        all. This is deliberately conservative, whole-module scoping, not
+        real control-flow analysis (see ``_single_assignment_constants``),
+        so it also declines names that would in fact be safe in a
+        scope-aware analysis -- the trade-off this test exists to pin.
+        """
+        source = (
+            'part1 = "sk_live_abc123"\n'
+            'part1 = "something_else"\n'
+            'part2 = "def456ghi789jkl012"\n'
+            'full = part1 + part2\n'
+            'print(full)\n'
+        )
+        out = abstracted(source, 'low')
+        assert 'sk_live_abc123' in out
+        assert 'def456ghi789jkl012' in out
+
+    def test_name_reused_as_function_parameter_is_not_resolved(self):
+        """Safety guard: a name that is also bound as a function parameter
+        anywhere in the module must not be resolved either."""
+        source = (
+            'def f(part1):\n'
+            '    return part1\n'
+            'part1 = "sk_live_abc123"\n'
+            'part2 = "def456ghi789jkl012"\n'
+            'full = part1 + part2\n'
+            'print(full)\n'
+        )
+        out = abstracted(source, 'low')
+        assert 'sk_live_abc123' in out
+        assert 'def456ghi789jkl012' in out
+
+    def test_benign_cross_variable_concatenation_is_not_flagged(self):
+        source = (
+            'greeting = "hello "\n'
+            'name = "world"\n'
+            'full = greeting + name\n'
+            'print(full)\n'
+        )
+        out = abstracted(source, 'low')
+        assert 'hello' in out and 'world' in out
+
+    @pytest.mark.parametrize('level', ALL_LEVELS)
+    def test_javascript_adjacent_literal_stripe_key_never_transmitted(self, level):
+        """The JavaScript adapter has its own tree-sitter-based classifier
+        (``core.languages.javascript``); the same split-credential shape
+        needs its own flattening there."""
+        source = 'const value = "sk_live_abc123" + "def456ghi789jkl012";\nconsole.log(value);\n'
+        out = abstracted(source, level, language='javascript')
+        assert 'sk_live_abc123' not in out
+        assert 'def456ghi789jkl012' not in out
+
+    def test_javascript_benign_concatenation_is_not_flagged(self):
+        source = 'const greeting = "hello " + "world";\nconsole.log(greeting);\n'
+        out = abstracted(source, 'low', language='javascript')
+        assert 'hello' in out and 'world' in out
+
+
+# ═══════════════════════════════════════════════════════════
+# L8 — a hardcoded fallback default on an env/vault read
+# ═══════════════════════════════════════════════════════════
+
+class TestL8EnvReadFallbackDefault:
+    """
+    Found while investigating EVAL-1 (see docs/PIR_GROUND_TRUTH_DECISION.md),
+    not itself part of that investigation.
+
+    ``core.context_features`` marked ``os.environ["KEY"]`` and
+    ``os.getenv("KEY")`` as a secret *source*, propagating SECRET to the
+    variable the read is assigned to -- but not the two-argument spelling
+    of the same idiom, ``os.getenv("KEY", "fallback")`` /
+    ``os.environ.get("KEY", "fallback")``, and a hardcoded fallback there
+    is exactly where a real credential hides in practice ("use the env
+    var, but default to the shared dev key if it isn't set").
+
+    Two compounding gaps, both in ``_is_secret_source`` /
+    ``ContextAnalyzer``:
+
+    1. ``os.environ.get(...)`` -- the *method-call* spelling -- was not
+       recognised as a secret source at all. ``_is_secret_source`` checked
+       only the call's own callee name (``_call_name(node.func)``, which
+       for ``os.environ.get`` returns the generic ``'get'``, not
+       ``'environ'``) or the subscript form (``os.environ["K"]``). Neither
+       branch inspected the *object* a generic accessor like ``.get()``
+       was called on.
+    2. Even once step 1 recognises the call, nothing propagated SECRET
+       into its second (fallback-default) argument -- the argument-
+       propagation counterpart of the f-string/``%``-template gap already
+       closed for the *assembly* side of a credential.
+
+    Both are fixed in ``ContextAnalyzer._is_secret_source`` (the
+    ``.get()``-on-a-known-source case) and a new
+    ``_mark_env_fallback_default`` (the second-argument case).
+    """
+
+    @pytest.mark.parametrize('level', ('low', 'medium', 'high', 'critical'))
+    def test_environ_get_positional_fallback_default_redacted(self, level):
+        source = 'token = os.environ.get("API_TOKEN", "hunter2222")\nprint(token)\n'
+        assert 'hunter2222' not in abstracted(source, level)
+
+    @pytest.mark.parametrize('level', ('low', 'medium', 'high', 'critical'))
+    def test_getenv_positional_fallback_default_redacted(self, level):
+        source = 'token = os.getenv("API_TOKEN", "hunter2222")\nprint(token)\n'
+        assert 'hunter2222' not in abstracted(source, level)
+
+    @pytest.mark.parametrize('level', ('low', 'medium'))
+    def test_environ_get_default_keyword_redacted(self, level):
+        source = 'token = os.environ.get("API_TOKEN", default="hunter2222")\nprint(token)\n'
+        assert 'hunter2222' not in abstracted(source, level)
+
+    @pytest.mark.parametrize('level', ('low', 'medium'))
+    def test_environ_get_fallback_redacted_even_with_non_secret_key_name(self, level):
+        """The fallback must be recognised via the *source* (os.environ),
+        not by riding along on a coincidentally secret-shaped key name."""
+        source = 'x = os.environ.get("SOME_SETTING", "hunter2222")\nprint(x)\n'
+        assert 'hunter2222' not in abstracted(source, level)
+
+    def test_subscript_form_still_works(self):
+        """Regression guard: the single-argument subscript form this
+        shares a code path with must be unaffected."""
+        source = 'token = os.environ["API_TOKEN"]\nprint(token)\n'
+        assert 'API_TOKEN' not in abstracted(source, 'low')
+
+    def test_unrelated_dict_get_is_not_flagged(self):
+        """``.get()`` on an object that is not a known secret source
+        (an ordinary dict, a config object) must not be swept in."""
+        source = 'val = config.get("name", "hunter2222")\nprint(val)\n'
+        out = abstracted(source, 'low')
+        assert 'hunter2222' in out and 'config' in out

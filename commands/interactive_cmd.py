@@ -5,12 +5,15 @@ Guided workflow using questionary prompts.
 Walks the user through: select file → abstract → copy → paste LLM response → translate.
 """
 
+import sys
 import typer
 from pathlib import Path
 
 from algorithms.abstract import abstract
+from algorithms.encrypt import decrypt_mapping, encrypt_mapping
 from algorithms.reconstruct import reconstruct
 from config.ignore_rules import load_rules
+from core.privacy_report import display_mapping
 from storage.session_manager import save_session, list_sessions
 from utils.file_io import read_file
 from utils.clipboard import copy_to_clipboard
@@ -38,7 +41,26 @@ def run_interactive():
     console.print()
 
     # Step 1: Get file path
-    file_path = prompts.ask_file_path()
+    try:
+        file_path = prompts.ask_file_path()
+    except Exception:
+        # questionary/prompt_toolkit need a real attached console. Piped,
+        # redirected, or scripted/CI invocation fails here with a raw,
+        # library-internal traceback (e.g. prompt_toolkit's
+        # NoConsoleScreenBufferError on Windows, or an EOFError on a
+        # closed stdin) -- found by direct testing with stdin/stdout
+        # redirected. Only reframe the error when the terminal really
+        # isn't interactive; a genuine bug in a real terminal session
+        # should still surface with its original traceback.
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            console.print(
+                "[error]✗ Interactive mode needs a real terminal -- "
+                "stdin/stdout here isn't one (piped, redirected, or run "
+                "from a script or CI). Run `codeabstract interactive` "
+                "from an interactive shell instead.[/error]"
+            )
+            raise typer.Exit(1) from None
+        raise
     if not file_path:
         console.print("[error]✗ No file selected.[/error]")
         raise typer.Exit(1)
@@ -115,13 +137,25 @@ def run_interactive():
             raise typer.Exit(1)
 
     # Step 7: Translate
+    # Reconstruct against a *masked* view of the mapping, not the raw
+    # session mapping -- RECONSTRUCT's "Source Context" blocks include
+    # +/-k lines of the *original* source per symbol, and the line that
+    # bound a credential contains the credential. Same fix, same reasoning,
+    # as `codeabstract translate` and `codeabstract review`.
     with console.status("[bold green]Running RECONSTRUCT(R, M̃, K)…"):
+        mapping_table = decrypt_mapping(result.encrypted_mapping, result.encryption_key)
+        view = display_mapping(mapping_table, reveal=False)
+        encrypted_view, view_key = encrypt_mapping(view)
         translated = reconstruct(
-            llm_response, result.encrypted_mapping, result.encryption_key,
+            llm_response, encrypted_view, view_key,
             line_map=result.line_map,
         )
 
     console.print("\n[success]✓ Translation complete![/success]\n")
+    console.print(
+        "[info]Secret values are masked. Use `codeabstract translate "
+        "--reveal` on this session to show them.[/info]\n"
+    )
     from rich.box import ROUNDED
     from rich.panel import Panel
     panel = Panel(translated, title="Translated Feedback", border_style="#d77757", box=ROUNDED, expand=False)

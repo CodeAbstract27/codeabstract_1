@@ -56,6 +56,17 @@ def get_key_store_dir() -> Path:
     return get_app_dir() / "keys"
 
 
+def get_flask_secret_key_path() -> Path:
+    """
+    Path to the web app's session-signing key.
+
+    Separate from the Fernet keys in ``get_key_store_dir()``: this key
+    signs and verifies the *login cookie*, and never decrypts a mapping
+    table. Losing or rotating it only signs everyone out.
+    """
+    return get_app_dir() / "flask_secret.key"
+
+
 # ═══════════════════════════════════════════════════════════
 # Detector version
 # ═══════════════════════════════════════════════════════════

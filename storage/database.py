@@ -35,6 +35,16 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_created_at
     ON sessions (created_at DESC);
+
+-- Web accounts. The CLI has no notion of a user -- sessions it writes
+-- carry no user_id (see the sessions.user_id migration below) -- this
+-- table only matters to web/auth.py.
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    email         TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 # ═══════════════════════════════════════════════════════════
@@ -60,6 +70,11 @@ MIGRATIONS = [
     # RECONSTRUCT and the privacy report can tell a Python session from a
     # JavaScript one.
     ("language", "TEXT DEFAULT 'python'"),
+    # Web accounts: which user this session belongs to. NULL for every
+    # session the CLI ever wrote (it has no login) and for anything saved
+    # before this migration -- storage.session_manager treats NULL as "no
+    # owner to check", which keeps the CLI's own behaviour unchanged.
+    ("user_id", "INTEGER"),
 ]
 
 
@@ -98,8 +113,26 @@ def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
     # own this did not fix the contention measured below; see that fix.
     conn = sqlite3.connect(str(db_path), timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+    except sqlite3.DatabaseError as exc:
+        # sqlite3.connect() itself does not touch the file -- this first
+        # PRAGMA is where a corrupted or non-SQLite file at db_path
+        # actually surfaces, as a bare "file is not a database" with no
+        # indication of which file or what to do about it. Every command
+        # that touches sessions goes through this one function, so fixing
+        # the message here covers all of them at once rather than each
+        # command needing its own catch. Re-raised as the same exception
+        # type so any existing `except sqlite3.DatabaseError` upstream is
+        # unaffected -- only the message changes.
+        conn.close()
+        raise sqlite3.DatabaseError(
+            f"{db_path} does not look like a valid CodeAbstract database "
+            f"({exc}). If it was corrupted, truncated, or replaced, "
+            f"restore it from a backup (see `codeabstract restore`) or "
+            f"move the file aside and let a new one be created."
+        ) from exc
 
     # Every caller in storage.session_manager opens a fresh connection per
     # operation (get_connection() is called anew for every save/load/list/

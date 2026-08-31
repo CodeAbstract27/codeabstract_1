@@ -73,6 +73,7 @@ SIGNAL_WEIGHTS: Dict[str, float] = {
     'secret_param': 0.80,        # f(<here>) where f's parameter is secret-named
     'secret_return': 0.60,       # return <here>, from get_token()
     'credential_template': 0.85,  # p = <here>, and p fills f"...://u:{p}@h"
+    'concat_secret': 0.90,       # "sk_live_" + "abc123..." -- assembled value matches a credential shape
 }
 
 
@@ -111,6 +112,103 @@ def _is_secret_name(name: Optional[str]) -> bool:
     return matches_any(name.lower(), SECRET_PATTERNS)
 
 
+def _flatten_concat(
+    node: ast.AST, bindings: Optional[Dict[str, ast.AST]] = None,
+) -> Optional[str]:
+    """
+    Flatten a chain of string-literal ``+`` concatenation into the text it
+    assembles at runtime, or ``None`` if any operand cannot be resolved to
+    a string literal or f-string.
+
+    An operand that is a ``Name`` resolves through *bindings* — see
+    :func:`_single_assignment_constants` — when that name was assigned a
+    literal-shaped value exactly once, anywhere in the module (``part1 =
+    "..."; part2 = "..."; full = part1 + part2``). This is a conservative,
+    whole-module approximation of the def-use chain a real dataflow
+    analysis would build, not a resolver for reassignment, branching
+    assignment, or names bound across different functions -- any of those
+    leave the name out of *bindings* entirely (see
+    :func:`_single_assignment_constants`), so this never risks resolving to
+    a *stale* or *wrong* value; it only ever narrows how often it can
+    resolve at all. A name outside *bindings*, or no *bindings* supplied,
+    still returns ``None`` for the whole chain, same as before.
+
+    Args:
+        node: AST node, typically an ``ast.BinOp``.
+        bindings: Optional map of name -> the single AST node it was
+            assigned, from :func:`_single_assignment_constants`.
+
+    Returns:
+        The concatenated text, or ``None`` if the chain is not built
+        entirely from string literals, f-strings, and resolvable names.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return build_fstring_template(node)
+    if isinstance(node, ast.Name) and bindings is not None:
+        resolved = bindings.get(node.id)
+        if resolved is not None:
+            return _flatten_concat(resolved, bindings)
+        return None
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _flatten_concat(node.left, bindings)
+        right = _flatten_concat(node.right, bindings)
+        if left is not None and right is not None:
+            return left + right
+    return None
+
+
+def _single_assignment_constants(tree: ast.AST) -> Dict[str, ast.AST]:
+    """
+    Map each name assigned a string-literal-shaped value exactly once,
+    anywhere in the module, to the AST node holding that value.
+
+    Deliberately whole-module and conservative rather than scope- or
+    control-flow-aware: a name bound more than once anywhere at all --
+    reassigned, a function parameter reusing the name, a loop or
+    ``with``/comprehension target, two different functions each with their
+    own local of the same name -- is excluded entirely. Resolving those
+    correctly needs real scope and control-flow analysis; this settles for
+    the common, simple case actually seen in practice (and in the audit
+    that motivated this: two variables assigned once, in sequence, then
+    concatenated) without ever risking attributing the wrong value to a
+    later use, which matters more here than catching every case does.
+
+    Args:
+        tree: Parsed module AST.
+
+    Returns:
+        ``name`` -> the ``ast.Constant``/``ast.JoinedStr`` node it was
+        assigned, for every name bound exactly once in the whole module.
+    """
+    binding_counts: Dict[str, int] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            binding_counts[node.id] = binding_counts.get(node.id, 0) + 1
+        elif isinstance(node, ast.arg):
+            binding_counts[node.arg] = binding_counts.get(node.arg, 0) + 1
+
+    candidates: Dict[str, ast.AST] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets, value = [node.target], node.value
+        else:
+            continue
+
+        if len(targets) != 1 or not isinstance(targets[0], ast.Name):
+            continue
+        name = targets[0].id
+        if binding_counts.get(name, 0) != 1:
+            continue
+        if value is not None and isinstance(value, (ast.Constant, ast.JoinedStr)):
+            candidates[name] = value
+
+    return candidates
+
+
 def _call_name(node: ast.AST) -> Optional[str]:
     """Final attribute or name of a call target: ``a.b.c()`` → ``'c'``."""
     if isinstance(node, ast.Call):
@@ -135,16 +233,28 @@ class ContextAnalyzer(ast.NodeVisitor):
         self._secret_functions: Set[str] = set()
         self._template_fed: Set[str] = set()
         self._tree = tree
+        self._simple_bindings = _single_assignment_constants(tree)
 
     # ── recording ──────────────────────────────────────
 
     def _mark(self, node: Optional[ast.AST], signal: str) -> None:
         """
-        Attach *signal* to *node*, following into f-string fragments.
+        Attach *signal* to *node*, following into f-string fragments and
+        string-concatenation operands.
 
         Marking is deliberately shallow: it follows the value being bound,
         not arbitrary sub-expressions, so ``token = build(user_id)`` does
-        not drag ``user_id`` into the secret class.
+        not drag ``user_id`` into the secret class. ``ast.BinOp`` string
+        concatenation is the one case marking must recurse into: a node
+        such as ``"hunter" + "2"`` is never itself tokenised (it carries no
+        name for ABSTRACT to key a token on), only its two ``Constant``
+        leaves are — walked and classified independently. A mark placed
+        only on the ``BinOp`` id, as the f-string handling below alone
+        would leave it, never reaches the leaves, and a password bound to
+        a secret-named target that happens to be written as two literal
+        fragments is transmitted in full at every privacy level. Recursing
+        keeps this consistent with the f-string case, which already closed
+        the equivalent gap for ``f"{a}{b}"``-shaped credentials.
         """
         if node is None:
             return
@@ -157,6 +267,9 @@ class ContextAnalyzer(ast.NodeVisitor):
                     self.evidence.setdefault(
                         id(value), ContextEvidence()
                     ).signals.append(signal)
+        elif isinstance(node, ast.BinOp):
+            self._mark(node.left, signal)
+            self._mark(node.right, signal)
 
     # ── pre-pass: learn the module's own functions ─────
 
@@ -265,20 +378,56 @@ class ContextAnalyzer(ast.NodeVisitor):
         """
         True if *node* reads from a known credential source.
 
-        Covers both call form (``os.getenv("K")``, ``vault.get_secret()``)
-        and subscript form (``os.environ["K"]``). The subscript case was
-        the one that mattered in practice and is easy to miss, because it
-        is the idiom most real code uses.
+        Covers direct-call form (``os.getenv("K")``, ``vault.get_secret()``),
+        subscript form (``os.environ["K"]``), and the generic-accessor form
+        (``os.environ.get("K")``, ``os.environ.get("K", "fallback")``). The
+        subscript case was the one that mattered in practice and is easy to
+        miss, because it is the idiom most real code uses; the generic-
+        accessor form matters just as much, because ``.get()`` is how that
+        same idiom supplies a default.
         """
         if isinstance(node, ast.Call):
             name = _call_name(node.func)
-            return bool(name and name.lower() in SECRET_SOURCES)
+            if name and name.lower() in SECRET_SOURCES:
+                return True
+            # os.environ.get("K") -- a generic accessor called on an
+            # object that is itself a known secret source. _call_name on
+            # the call's own func only sees 'get', the final segment, not
+            # the object it was called on.
+            if isinstance(node.func, ast.Attribute) and node.func.attr == 'get':
+                receiver = _call_name(node.func.value)
+                if receiver and receiver.lower() in SECRET_SOURCES:
+                    return True
+            return False
 
         if isinstance(node, ast.Subscript):
             name = _call_name(node.value)
             return bool(name and name.lower() in SECRET_SOURCES)
 
         return False
+
+    def _mark_env_fallback_default(self, node: ast.Call) -> None:
+        """
+        Mark the fallback-default argument of a two-argument env/vault read.
+
+        ``os.getenv("KEY", "fallback")`` / ``os.environ.get("KEY", "fallback")``
+        are the two-argument spelling of the same read ``_is_secret_source``
+        already recognises for the bare, single-argument form. A hardcoded
+        fallback there is exactly where a real credential hides in
+        practice -- "use the env var, but default to the shared dev key if
+        it isn't set" -- and nothing propagated SECRET into it: covering
+        only the call-yields-a-secret case left the argument that supplies
+        one when the read *fails* unprotected, an f-string/``%``-template
+        argument shaped gap on the read side instead of the assembly side.
+
+        Args:
+            node: The ``ast.Call`` already confirmed to be a secret source.
+        """
+        if len(node.args) >= 2:
+            self._mark(node.args[1], 'env_read')
+        for keyword in node.keywords:
+            if keyword.arg == 'default':
+                self._mark(keyword.value, 'env_read')
 
     # ── calls ──────────────────────────────────────────
 
@@ -298,6 +447,7 @@ class ContextAnalyzer(ast.NodeVisitor):
         # os.environ.get("API_KEY") → the *call* yields a secret
         if self._is_secret_source(node):
             self._mark(node, 'env_read')
+            self._mark_env_fallback_default(node)
 
         # "db://{}:{}@host".format(user, password) — the same construct as
         # the f-string, spelled the older way. The template is recognised
@@ -353,7 +503,44 @@ class ContextAnalyzer(ast.NodeVisitor):
                 )
                 for operand in operands:
                     self._mark(operand, 'credential_template')
+        elif isinstance(node.op, ast.Add):
+            # "sk_live_" + "abc123def456ghi789" -- a credential built from
+            # adjacent literal fragments carries no name signal at all:
+            # there is no binding, keyword or dict key to inherit from, so
+            # whole-chain value-shape detection is the only signal
+            # available. This mirrors build_fstring_template's flattening
+            # for f-strings, the same gap on the ``+`` spelling of it.
+            # An operand may itself be a Name resolved through
+            # self._simple_bindings ("part1 = ...; full = part1 + part2") --
+            # see _flatten_concat and _single_assignment_constants.
+            flattened = _flatten_concat(node, self._simple_bindings)
+            if flattened and is_secret_value(flattened):
+                self._mark(node, 'concat_secret')
+                self._mark_resolved_name_operands(node)
         self.generic_visit(node)
+
+    def _mark_resolved_name_operands(self, node: ast.AST) -> None:
+        """
+        Mark the *defining* literal of any ``Name`` operand a concatenation
+        chain resolved through ``self._simple_bindings``.
+
+        ``_mark`` on the ``BinOp`` itself (see the caller) reaches a
+        ``Constant``/``JoinedStr`` operand directly, but a ``Name`` operand
+        is a *read* of a value assigned elsewhere -- marking the read
+        cannot redact anything, because ABSTRACT tokenises the literal at
+        its point of *definition*, not this later reference to it. Walking
+        back to that definition and marking it there is what actually
+        closes the leak: ``part1 = SECRET_0`` is redacted once, and every
+        later read of ``part1`` -- including this concatenation -- reuses
+        the same token, the way any other symbol occurrence does.
+        """
+        if isinstance(node, ast.Name):
+            defining = self._simple_bindings.get(node.id)
+            if defining is not None:
+                self._mark(defining, 'concat_secret')
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            self._mark_resolved_name_operands(node.left)
+            self._mark_resolved_name_operands(node.right)
 
     # ── containers ─────────────────────────────────────
 

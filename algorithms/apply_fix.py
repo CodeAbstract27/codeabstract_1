@@ -147,10 +147,18 @@ def _looks_like_whole_file(code: str, original_source: str) -> bool:
 
     original_names = top_level_names(original)
     if not original_names:
-        # No definitions to compare; fall back to a size heuristic.
-        return len(code.strip().splitlines()) >= len(
-            original_source.strip().splitlines()
-        )
+        # No definitions to compare structurally (a plain script). A bare
+        # line-count check is not evidence of a rewrite: an unrelated code
+        # block that merely happens to be long enough would pass it, and
+        # applying it would silently discard the developer's actual file —
+        # exactly the failure mode this module exists to avoid. Require the
+        # block to also share most of the original's content.
+        if len(code.strip().splitlines()) < len(original_source.strip().splitlines()):
+            return False
+        similarity = difflib.SequenceMatcher(
+            None, original_source.split(), code.split()
+        ).ratio()
+        return similarity >= 0.4
 
     suggested_names = top_level_names(suggested)
     covered = len(original_names & suggested_names) / len(original_names)

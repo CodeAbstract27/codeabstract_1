@@ -1,0 +1,60 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # dev: pytest itself, plus hypothesis property tests
+      # web: the Flask interface under test
+      # ml: the Random Forest baseline
+      # llm: the three provider clients (mocked in tests -- no API keys used)
+      # javascript: tree-sitter, for the JS/TS language adapter's tests
+      - name: Install the project and its test extras
+        run: pip install -e ".[dev,web,ml,llm,javascript]"
+
+      # Never point at a real backend: every test in this repo drives a
+      # FakeLLMClient (see tests/test_web/conftest.py) or mocks the
+      # provider SDK directly, so no API key is needed and none is set.
+      - name: Run the backend test suite
+        run: pytest tests/ --ignore=tests/test_web_e2e -q
+
+  browser:
+    name: Browser (Playwright) tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install the project and its test extras
+        run: pip install -e ".[dev,web,ml,llm,javascript]"
+
+      - name: Install Playwright's Chromium
+        run: playwright install --with-deps chromium
+
+      - name: Run the browser end-to-end suite
+        run: pytest tests/test_web_e2e -q

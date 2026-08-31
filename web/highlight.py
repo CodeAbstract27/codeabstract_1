@@ -258,8 +258,31 @@ def highlight_vault_rows(vault: Sequence) -> List[Dict[str, str]]:
             'detector': html.escape(str(data.get('detector', ''))),
             'confidence': f"{float(data.get('confidence', 1.0)):.2f}",
             'masked': bool(data.get('masked', False)),
+            'signals': html.escape(_signals_text(data.get('signals') or {})),
         })
     return rows
+
+
+def _signals_text(signals: dict) -> str:
+    """
+    A short "why" summary from the shape features in ``signals``.
+
+    Built here, not in the client, so the single place already responsible
+    for what is safe to put on the page is also the one assembling this
+    string — see the module docstring.
+    """
+    if not signals:
+        return ''
+    parts = [
+        f"{signals['length']} chars",
+        f"entropy {signals['entropy']:.1f}",
+        str(signals['case_style']),
+    ]
+    if signals.get('digit_ratio', 0) >= 0.3:
+        parts.append(f"{signals['digit_ratio'] * 100:.0f}% digits")
+    if signals.get('looks_like_url'):
+        parts.append('URL-shaped')
+    return ' · '.join(parts)
 
 
 # ═══════════════════════════════════════════════════════════

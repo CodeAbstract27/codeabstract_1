@@ -228,6 +228,44 @@ class TestListSessions:
         assert "created_at" in s
         assert "statistics" in s
 
+    def test_newest_session_is_not_dropped_when_created_at_ties(self, tmp_db):
+        """
+        Regression: `created_at` is a SQLite TIMESTAMP with only
+        second-level granularity, so any burst of session creation within
+        the same second (concurrent requests, a batch script, or just a
+        fast test run) produces rows with an identical value. Ordering by
+        `created_at DESC` alone leaves SQLite to break the tie however it
+        likes, which turned out to be *insertion* order -- so the just-
+        created, truly-newest session could be silently excluded from
+        `list_sessions(limit=N)` while stale same-second rows were shown
+        instead. The fix adds `rowid DESC` as a deterministic tie-breaker;
+        this reproduces the exact scenario by inserting rows with an
+        explicit, identical `created_at` rather than relying on timing.
+        """
+        import uuid
+
+        ids = [str(uuid.uuid4()) for _ in range(25)]
+        for i, sid in enumerate(ids):
+            tmp_db.execute(
+                "INSERT INTO sessions "
+                "(session_id, source_file_path, created_at, "
+                " encrypted_mapping, encryption_key) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (sid, f"file_{i}.py", "2026-01-01 00:00:00", b"x", b"y"),
+            )
+        tmp_db.commit()
+
+        listed_ids = [s["session_id"] for s in list_sessions(limit=20)]
+
+        assert ids[-1] in listed_ids, (
+            "the most-recently-inserted session was dropped from the "
+            "'recent sessions' list due to a created_at tie"
+        )
+        assert listed_ids == list(reversed(ids))[:20], (
+            "sessions with a tied created_at must still come back in "
+            "reverse-insertion (newest-first) order"
+        )
+
 
 # ═══════════════════════════════════════════════════════════
 # get_session_count

@@ -26,7 +26,7 @@ from algorithms.encrypt import decrypt_mapping, encrypt_mapping
 from algorithms.reconstruct import reconstruct
 from config.ignore_rules import load_rules
 from core.languages import detect_language, registered_languages
-from core.privacy_report import build_report
+from core.privacy_report import build_report, display_mapping
 from core.query_abstractor import abstract_query
 from llm import ProviderError, create_client
 from llm.base import build_prompt
@@ -52,6 +52,7 @@ def run_review(
     privacy_report: bool = False,
     report_json: Optional[str] = None,
     save: bool = True,
+    reveal: bool = False,
 ):
     """Execute the review command."""
     file_path = Path(file)
@@ -198,11 +199,23 @@ def run_review(
         )
 
         # ── Step 4: Reconstruct ──────────────────────
+        # Reconstruct against a *masked* view of the mapping, not the raw
+        # session mapping. RECONSTRUCT's "Source Context" blocks include
+        # +/-k lines of the *original* source per symbol, and the line that
+        # bound a credential contains the credential -- so without this,
+        # the terminal printed the live secret value on every review, with
+        # no flag able to prevent it. Same fix, same reasoning, as
+        # `codeabstract translate` (commands/translate_cmd.py) and the web
+        # interface (web/service.py). The raw mapping is still what gets
+        # saved to the session below, so `apply` and `translate --reveal`
+        # keep working against the real values.
         step = progress.add_task("[4/4] Reconstructing…", total=None)
+        view = display_mapping(mapping_table, reveal=reveal)
+        encrypted_view, view_key = encrypt_mapping(view)
         final = reconstruct(
             llm_response=llm_response.content,
-            encrypted_mapping=encrypted_mapping,
-            encryption_key=encryption_key,
+            encrypted_mapping=encrypted_view,
+            encryption_key=view_key,
             line_map=result.line_map,
         )
         progress.update(step, description="[green]✓ Done[/green]")
@@ -232,6 +245,11 @@ def run_review(
     console.print("─" * 60)
     console.print(final)
     console.print("─" * 60)
+    if not reveal:
+        console.print(
+            "[dim]Secret values are masked above. Pass --reveal to show "
+            "them in the terminal.[/dim]"
+        )
 
     usage = llm_response.usage
     if usage.reported:

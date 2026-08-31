@@ -182,10 +182,10 @@
     var rows = data.vault_rows.map(function (item) {
       return [item.token, item.name + (item.masked ? '  (masked)' : ''),
               item.label, String(item.lineno), String(item.occurrences),
-              item.detector, item.confidence];
+              item.detector, item.confidence, item.signals || ''];
     });
     buildTable(el('vault-table'),
-      ['Token', 'Original', 'Label', 'Line', 'Uses', 'Detector', 'Conf.'],
+      ['Token', 'Original', 'Label', 'Line', 'Uses', 'Detector', 'Conf.', 'Why (shape signals)'],
       rows, 'Nothing was abstracted at this privacy level.');
   }
 

@@ -7,6 +7,31 @@ Typer application that registers all commands and sub-command groups.
 from typing import Optional
 import typer
 
+from config.settings import PRIVACY_LEVELS
+
+
+def _validate_privacy_level(value: str) -> str:
+    """
+    Reject an unrecognised ``--privacy``/``--privacy-level`` value at the
+    CLI boundary.
+
+    ``typer.Option(..., "str")`` accepts anything; a typo like ``hihg``
+    was silently accepted and passed straight through to the abstraction
+    engine, which tolerates an unknown level by falling back to 'medium'
+    (``PRIVACY_LEVELS.get(privacy_level, PRIVACY_LEVELS['medium'])`` in
+    ``algorithms.abstract._should_abstract``) -- so a user asking for
+    ``critical`` and mistyping it got ``medium`` with no indication
+    anything was wrong. A CLI option should refuse a bad value, not
+    silently substitute one.
+    """
+    if value not in PRIVACY_LEVELS:
+        valid = ", ".join(sorted(PRIVACY_LEVELS))
+        raise typer.BadParameter(
+            f"'{value}' is not a valid privacy level. Choose from: {valid}"
+        )
+    return value
+
+
 app = typer.Typer(
     name="codeabstract",
     help="Privacy-Preserving CLI for Secure LLM Code Consultation",
@@ -34,7 +59,10 @@ app.add_typer(audit_app, name="audit")
 def abstract(
     file: str = typer.Argument(
         ..., help="Path to a Python or JavaScript/TypeScript source file"),
-    privacy: str = typer.Option("high", help="Privacy level: low|medium|high|critical"),
+    privacy: str = typer.Option(
+        "high", help="Privacy level: low|medium|high|critical",
+        callback=_validate_privacy_level,
+    ),
     context_window: int = typer.Option(
         3, "--context-window", "-k", min=0,
         help="Context window size (lines of surrounding source per mapped "
@@ -123,12 +151,19 @@ def review(
         None, "--provider", "-P", help="gemini | openai | anthropic"),
     model: Optional[str] = typer.Option(
         None, "--model", "-M", help="Model identifier for the provider"),
-    privacy: str = typer.Option("high", help="Privacy level: low|medium|high|critical"),
+    privacy: str = typer.Option(
+        "high", help="Privacy level: low|medium|high|critical",
+        callback=_validate_privacy_level,
+    ),
     privacy_report: bool = typer.Option(
         False, "--privacy-report", "-r",
         help="Show what was hidden, kept readable, and uncertain"),
     report_json: Optional[str] = typer.Option(
         None, "--privacy-report-json", help="Write the privacy report to JSON"),
+    reveal: bool = typer.Option(
+        False, "--reveal",
+        help="Show real secret values in the reconstructed output instead "
+             "of masking them"),
 ):
     """Auto review: Abstract -> LLM -> Reconstruct"""
     from commands.review_cmd import run_review
@@ -144,6 +179,7 @@ def review(
         query=query,
         privacy_report=privacy_report,
         report_json=report_json,
+        reveal=reveal,
     )
 
 
@@ -160,10 +196,13 @@ def web(
     expose: bool = typer.Option(
         False, "--expose",
         help="Acknowledge binding to a non-loopback interface"),
+    tls: bool = typer.Option(
+        False, "--tls",
+        help="Serve over HTTPS with a self-signed certificate"),
 ):
     """Serve the web interface (Phase 5)."""
     from commands.web_cmd import run_web
-    run_web(host, port, debug, no_save, allow_reveal, expose)
+    run_web(host, port, debug, no_save, allow_reveal, expose, tls)
 
 
 @app.command()
@@ -174,11 +213,37 @@ def stats():
 
 
 @app.command()
+def backup(
+    output: str = typer.Argument(
+        ..., help="Where to write the backup (a .zip is appended if missing)"),
+):
+    """
+    Back up the whole application directory: sessions, keys, config, and
+    the audit log, in one archive.
+    """
+    from commands.backup_cmd import run_backup
+    run_backup(output)
+
+
+@app.command()
+def restore(
+    input: str = typer.Argument(..., help="Path to a backup made by `backup`"),
+    force: bool = typer.Option(
+        False, "--force", "-f",
+        help="Skip the confirmation prompt when files would be overwritten"),
+):
+    """Restore the application directory from a backup made by `backup`."""
+    from commands.backup_cmd import run_restore
+    run_restore(input, force)
+
+
+@app.command()
 def evaluate(
     privacy: str = typer.Option(
         "high",
         "--privacy-level", "-p",
         help="Privacy level to evaluate: low|medium|high|critical",
+        callback=_validate_privacy_level,
     ),
     output: str = typer.Option(
         "evaluation_output",
@@ -292,7 +357,9 @@ def providers_compare(
         None, "--providers", help="Comma-separated names; all ready ones by default"),
     task: str = typer.Option("review", "--task", "-t"),
     query: Optional[str] = typer.Option(None, "--query", "-q"),
-    privacy: str = typer.Option("high", "--privacy"),
+    privacy: str = typer.Option(
+        "high", "--privacy", callback=_validate_privacy_level,
+    ),
     output: Optional[str] = typer.Option(
         None, "--output", "-o", help="Write the full comparison to JSON"),
 ):

@@ -26,6 +26,8 @@
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --radius: 8px;
+  --shadow: 0 1px 2px rgba(20, 25, 35, 0.06);
+  --shadow-hover: 0 3px 10px rgba(20, 25, 35, 0.1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -47,10 +49,26 @@
     --ok: #57d364;
     --ok-bg: #10301a;
     --warn-bg: #33220f;
+
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    --shadow-hover: 0 4px 14px rgba(0, 0, 0, 0.45);
   }
 }
 
 * { box-sizing: border-box; }
+
+/* WebKit-specific: at a viewport width equal to .page's own computed
+   width, WebKit includes .page's end padding in the scrollable-overflow
+   area (document.documentElement.scrollWidth ends up a few px over
+   clientWidth, and the page genuinely scrolls that far) even though
+   Chromium and Firefox report zero overflow for the identical layout.
+   The two real oversized-element bugs (select width, code-pane grid item)
+   are fixed at their source above; this is a narrower backstop for that
+   one cross-engine measurement difference. It has to be on `html`, not
+   just `body` -- document.documentElement (i.e. <html>) is what reports
+   the extra scrollWidth, and overflow-x on body alone doesn't constrain
+   its own ancestor. */
+html, body { overflow-x: hidden; }
 
 body {
   margin: 0;
@@ -66,7 +84,8 @@ body {
 .topbar {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
   padding: 0.75rem 1.5rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -103,6 +122,14 @@ body {
 .nav a { color: var(--text-dim); text-decoration: none; font-size: 0.9rem; }
 .nav a:hover { color: var(--accent); }
 
+.account { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
+.account-email { color: var(--text-dim); }
+.logout-form { margin: 0; }
+.account a { color: var(--text-dim); text-decoration: none; transition: color 0.15s ease; }
+.account a:hover { color: var(--accent); }
+.account .signup-link { color: var(--accent); font-weight: 600; }
+.account .signup-link:hover { text-decoration: underline; }
+
 .page { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
 
 .footer {
@@ -121,6 +148,23 @@ body {
   border-radius: var(--radius);
   padding: 1.25rem;
   margin-bottom: 1.25rem;
+  box-shadow: var(--shadow);
+  animation: panel-in 0.25s ease-out;
+}
+
+/* transform only, deliberately never opacity: if this animation is ever
+   stuck, paused, or throttled mid-playback (found happening in a headless
+   browser -- animationPlayState stayed 'running' with opacity frozen at
+   its 'from' value indefinitely), a panel whose *visibility* depended on
+   it would vanish outright. Sitting 4px low is a harmless failure mode;
+   invisible is not. */
+@keyframes panel-in {
+  from { transform: translateY(4px); }
+  to { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel, .stat-card { animation: none; }
 }
 
 .panel-head {
@@ -145,7 +189,17 @@ h3 { margin: 0 0 0.5rem; font-size: 0.92rem; }
 
 /* ── Form controls ────────────────────────────────────── */
 
-.field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  /* Without this, a <select> child's intrinsic width (sized to its widest
+     <option>, not its rendered value) keeps this flex item from shrinking
+     below that width at all -- flex-wrap only helps items compete for
+     space in a row, it doesn't shrink an oversized item on its own line. */
+  min-width: 0;
+}
 .field > span { color: var(--text-dim); }
 .field.narrow { max-width: 110px; }
 .field.checkbox { flex-direction: row; align-items: center; gap: 0.4rem; }
@@ -163,6 +217,16 @@ input[type="text"], input[type="number"], select, textarea {
   padding: 0.4rem 0.55rem;
   font-family: inherit;
   font-size: 0.88rem;
+  /* A <select> sizes itself to its widest <option> ("critical — Everything
+     is abstracted including short names"), which is wider than a phone
+     viewport and, unlike a text input, has no `size` attribute keeping it
+     narrow by default. `width` (not just max-width) is what actually
+     overrides that intrinsic sizing; `.field`'s min-width: 0 is what lets
+     the flex item shrink to make room for it in the first place. Without
+     both, that one control forces horizontal scrolling on the whole page
+     below ~440px. */
+  width: 100%;
+  max-width: 100%;
 }
 
 input[type="text"]:focus, input[type="number"]:focus,
@@ -192,7 +256,14 @@ select:focus, textarea:focus {
   font: inherit;
   font-size: 0.86rem;
   cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
 }
+
+button.primary:hover:not(:disabled), .file-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+}
+button:active:not(:disabled) { transform: translateY(0); }
 
 button:hover, .file-button:hover { border-color: var(--accent); }
 button:disabled { opacity: 0.5; cursor: progress; }
@@ -240,6 +311,15 @@ button.primary { background: var(--accent); color: var(--accent-text); border-co
 
 .side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 @media (max-width: 980px) { .side-by-side { grid-template-columns: 1fr; } }
+
+.pane {
+  /* Grid items default to min-width: auto, i.e. the min-content width of
+     their contents. .code-line uses white-space: pre for long, unbroken
+     lines of code, so without this the grid track (and the page under it)
+     grows to fit the longest line instead of .code-view's own
+     `overflow: auto` scrolling it internally as intended. */
+  min-width: 0;
+}
 
 .code-view {
   background: var(--surface-2);
@@ -293,7 +373,9 @@ mark.unresolved { background: var(--warn-bg); color: var(--value); text-decorati
   background: none;
   color: var(--text-dim);
   padding: 0.5rem 0.9rem;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
+.tab:hover:not(.active) { color: var(--text); }
 
 .tab.active { color: var(--text); border-bottom-color: var(--accent); }
 
@@ -324,6 +406,7 @@ td code, .mono { font-family: var(--mono); font-size: 0.78rem; }
 .badge { font-size: 0.7rem; padding: 0.05rem 0.4rem; border-radius: 999px; }
 .badge.ok { background: var(--ok-bg); color: var(--ok); }
 .badge.masked { background: var(--secret-bg); color: var(--secret); }
+.badge.snapshot { background: var(--value-bg); color: var(--value); }
 
 .response-view {
   background: var(--surface-2);
@@ -345,3 +428,163 @@ td code, .mono { font-family: var(--mono); font-size: 0.78rem; }
 
 .empty { color: var(--text-dim); font-size: 0.9rem; }
 .error-panel h2 { margin-top: 0; color: var(--secret); }
+
+/* ── Auth pages ───────────────────────────────────────── */
+
+.auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 65vh;
+}
+.auth-panel { width: 100%; max-width: 380px; box-shadow: var(--shadow); }
+.auth-panel h2 { margin-top: 0; }
+.auth-panel form { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 1rem; }
+
+/* ── Dashboard ────────────────────────────────────────── */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  box-shadow: var(--shadow);
+  animation: panel-in 0.25s ease-out;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.stat-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+
+.muted-cell { color: var(--text-dim); }
+
+.stat-card dt {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.35rem;
+}
+
+.stat-card dd {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card dd.accent-secret { color: var(--secret); }
+.stat-card dd.accent-value { color: var(--value); }
+
+/* Vertical bar chart — one hue (magnitude), thin bars, rounded data-ends,
+   direct value on hover via the column's title attribute. */
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+  height: 140px;
+  padding-top: 0.5rem;
+}
+
+.bar-col {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+
+.bar-track {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 22px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.bar-fill {
+  width: 100%;
+  min-height: 2px;
+  background: var(--accent);
+  border-radius: 3px 3px 0 0;
+}
+
+/* Bar/pill heights and widths as fixed classes, in 5% steps, rather than
+   an inline `style="height: …%"` -- the CSP's `style-src 'self'` (see
+   web/app.py) blocks inline style attributes outright, which silently
+   flattened every bar to 0% height until this was caught by loading the
+   Dashboard in a real browser and checking its console. Round to the
+   nearest one of these in the template instead of writing a style
+   attribute; each pct-h-N/pct-w-N pair below covers the two chart types
+   that need a percentage (a vertical bar's height, a horizontal one's
+   width). 21 steps (0, 5, …, 100) is enough resolution for a bar chart. */
+.pct-h-0 { height: 0%; } .pct-h-5 { height: 5%; } .pct-h-10 { height: 10%; }
+.pct-h-15 { height: 15%; } .pct-h-20 { height: 20%; } .pct-h-25 { height: 25%; }
+.pct-h-30 { height: 30%; } .pct-h-35 { height: 35%; } .pct-h-40 { height: 40%; }
+.pct-h-45 { height: 45%; } .pct-h-50 { height: 50%; } .pct-h-55 { height: 55%; }
+.pct-h-60 { height: 60%; } .pct-h-65 { height: 65%; } .pct-h-70 { height: 70%; }
+.pct-h-75 { height: 75%; } .pct-h-80 { height: 80%; } .pct-h-85 { height: 85%; }
+.pct-h-90 { height: 90%; } .pct-h-95 { height: 95%; } .pct-h-100 { height: 100%; }
+
+.pct-w-0 { width: 0%; } .pct-w-5 { width: 5%; } .pct-w-10 { width: 10%; }
+.pct-w-15 { width: 15%; } .pct-w-20 { width: 20%; } .pct-w-25 { width: 25%; }
+.pct-w-30 { width: 30%; } .pct-w-35 { width: 35%; } .pct-w-40 { width: 40%; }
+.pct-w-45 { width: 45%; } .pct-w-50 { width: 50%; } .pct-w-55 { width: 55%; }
+.pct-w-60 { width: 60%; } .pct-w-65 { width: 65%; } .pct-w-70 { width: 70%; }
+.pct-w-75 { width: 75%; } .pct-w-80 { width: 80%; } .pct-w-85 { width: 85%; }
+.pct-w-90 { width: 90%; } .pct-w-95 { width: 95%; } .pct-w-100 { width: 100%; }
+
+.bar-label {
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  margin-top: 0.35rem;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  max-height: 3.2rem;
+}
+
+/* Horizontal bar chart — fixed categorical order, direct-labeled, so no
+   separate legend box is needed for the small counts this page shows. */
+.hbar-chart { display: flex; flex-direction: column; gap: 0.55rem; }
+.hbar-row { display: flex; align-items: center; gap: 0.6rem; }
+.hbar-label { width: 5rem; flex: 0 0 auto; font-size: 0.82rem; color: var(--text); }
+.hbar-track {
+  flex: 1 1 auto;
+  background: var(--surface-2);
+  border-radius: 4px;
+  height: 10px;
+  overflow: hidden;
+}
+.hbar-fill { height: 100%; border-radius: 4px; }
+.hbar-value {
+  width: 2.5rem;
+  flex: 0 0 auto;
+  text-align: right;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+/* Fixed categorical order — never reassigned when a filter changes which
+   languages are present. */
+.lang-0 { background: var(--accent); }
+.lang-1 { background: var(--ok); }
+.lang-2 { background: var(--value); }
+.lang-3 { background: var(--identifier); }
+
+.table-fallback { margin-top: 0.9rem; }
+.table-fallback summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+/* ── Insights page ────────────────────────────────────── */
+
+.insights-page .tab-body { margin-top: 0.25rem; }

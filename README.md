@@ -15,6 +15,7 @@ The system performs AST-based semantic abstraction to transform proprietary Pyth
 * **Context-Aware Reconstruction:** Translates the LLM's feedback back to your original source code context, appending multi-line code snippets so you know exactly where to apply changes.
 * **Secure Local Storage:** All mappings between original names and abstracted tokens are stored in a local SQLite database, encrypted using AES-128-CBC + HMAC-SHA256 (Fernet).
 * **Interactive CLI Wizard:** A beautiful, fully guided terminal UI (built with Rich and Typer) makes the abstraction and translation process seamless.
+* **Web Dashboard & Insights:** An optional Flask web interface adds account-scoped session history, an activity dashboard, and an Insights page surfacing the audit log's tamper-evidence chain and the evaluation suite's benchmarks — see "Accounts, Dashboard and Insights" under Web Interface below.
 
 ---
 
@@ -45,7 +46,16 @@ python -m venv .venv
 
 # Install the application
 pip install -e ".[dev]"
+
+# Or, for an exact, reproducible set of versions (including every optional
+# extra: web, ml, llm, javascript) instead of pyproject.toml's `>=` ranges:
+pip install -r requirements-lock.txt
+pip install -e . --no-deps
 ```
+
+`requirements-lock.txt` is generated with [pip-tools](https://pip-tools.readthedocs.io/):
+`pip-compile --extra=dev --extra=web --extra=ml --extra=llm --extra=javascript -o requirements-lock.txt pyproject.toml`.
+Regenerate it after changing any dependency in `pyproject.toml`.
 
 ---
 
@@ -140,8 +150,29 @@ Three things the web interface does that the CLI does not need to:
   and whatever you are screen-sharing. `--allow-reveal` turns the masking off if you want it off.
 * **No file is ever read from the server.** The filename you type only picks the language adapter —
   the code that gets abstracted is the code in the editor.
-* **It refuses to bind anywhere but loopback** without `--expose`, because nothing in it
-  authenticates a caller and the vault is on the other side of the port.
+* **It refuses to bind anywhere but loopback** without `--expose` — signing in only protects one
+  account's sessions from another's, it does not gate the port itself. Add `--tls` alongside
+  `--expose` to serve over HTTPS with a self-signed certificate (no new dependency; needs only
+  `cryptography`, already required) instead of sending logins and code in the clear.
+
+#### 👤 Accounts, Dashboard and Insights
+
+The **Workbench** and **Sessions** pages work exactly as above whether or not you sign in — a
+session created while signed out is simply unowned, the same as every session the CLI has ever
+written. Signing up (`/signup`) or in (`/login`) unlocks two more pages, both account-scoped:
+
+* **Dashboard** — totals, a 14-day activity chart, and a language-mix breakdown, computed only
+  from sessions your account created.
+* **Insights** — the append-only, hash-chained **audit log** (`storage/audit_log.py`) with a
+  one-click chain-integrity check, and whatever `python evaluation/run_eval.py` last wrote to
+  `evaluation_output/evaluation_results.json` — privacy leakage rate, reconstruction fidelity,
+  classifier accuracy, and a throughput-vs-file-size curve.
+
+Passwords are hashed (never stored in the clear), the login cookie is HttpOnly/SameSite=Lax and
+signed with a key generated on first run (`~/.codeabstract/flask_secret.key`), and repeated failed
+logins against one account from one address are locked out for 15 minutes. None of this changes the
+web interface's core promise: it still refuses to bind anywhere but loopback without `--expose`,
+and an account only ever scopes *your own* sessions — it is not a multi-tenant deployment story.
 
 #### 📊 Session & Statistics Management
 View saved local sessions and global usage statistics:
@@ -151,6 +182,18 @@ python cli.py sessions show <ID>      # View details of a specific session
 python cli.py sessions delete <ID>    # Delete a session
 python cli.py stats                   # View global usage statistics
 ```
+
+#### 💾 Backup & Restore
+Every session's mapping table, its decryption key, the audit log, and your config all live under
+one directory (`~/.codeabstract`, or `$CODEABSTRACT_HOME`). Lose that directory and you lose all of
+it together — `backup`/`restore` close that gap:
+```powershell
+python cli.py backup ./codeabstract-backup     # zips ~/.codeabstract to codeabstract-backup.zip
+python cli.py restore ./codeabstract-backup.zip # restores it (prompts before overwriting)
+python cli.py restore ./codeabstract-backup.zip --force
+```
+The archive contains the keys that decrypt every session in it — store and delete it like a
+credential, not like a document.
 
 ---
 
@@ -181,14 +224,19 @@ dropped, and identifiers named inside the survivors are rewritten to their token
 
 CodeAbstract ships with a comprehensive test suite covering the core algorithms, encryption, CLI commands, and end-to-end workflows. 
 
-**650 tests pass.** Run them with `pytest`:
+**1,201 tests pass** (1,078 backend/CLI/algorithm/storage/web-unit + 123 browser E2E on Chromium by
+default, plus a cross-browser Chromium/Firefox/WebKit smoke pass — see
+[docs/AUDIT.md](docs/AUDIT.md) for the audit history behind these numbers). Run them with `pytest`:
 
 ```powershell
-# Run the full test suite
-pytest tests/ -v
+# Run the full test suite (excluding the Playwright browser suite)
+pytest tests/ --ignore=tests/test_web_e2e -v
 
-# Just the web interface (201 tests)
+# Just the web interface — Flask test client (231 tests)
 pytest tests/test_web/ -v
+
+# Real-browser E2E (Playwright/Chromium)
+pytest tests/test_web_e2e/ -v
 
 # Run tests with a coverage report
 pytest tests/ --cov --cov-report=term-missing
@@ -204,7 +252,12 @@ The suite is organised by the phase that introduced each guarantee, so a failure
 | `tests/test_algorithms/test_phase3_adversary.py` | The linkage attack and Code Privacy Entropy |
 | `tests/test_algorithms/test_phase4_platform.py` | Providers, audit log, key storage, JavaScript |
 | `tests/test_algorithms/test_leak_regressions.py` | Six leak paths the phase suites missed — see the file's header table |
-| `tests/test_web/` | The web interface — see `test_web_privacy.py` for the guarantee itself |
+| `tests/test_algorithms/test_property_based.py` | Hypothesis properties: token-collision safety, scope isolation, syntax preservation |
+| `tests/test_algorithms/test_stress_concurrency.py` | 10,000-identifier scale; concurrent-session secret isolation |
+| `tests/test_commands/` | CLI command surface — `apply`, `audit`, `providers`, `review`, `interactive`, `sessions`, `translate` |
+| `tests/test_llm/` | Provider clients (Gemini, OpenAI, Anthropic) against mocked SDK boundaries |
+| `tests/test_web/` | The web interface via Flask's test client — see `test_web_privacy.py` for the guarantee itself |
+| `tests/test_web_e2e/` | The same guarantees in a real browser (Playwright): DOM/storage/cookie leak checks, XSS rendering safety, responsive layout, accessibility |
 
 ---
 

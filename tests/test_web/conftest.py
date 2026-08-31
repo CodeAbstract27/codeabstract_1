@@ -160,8 +160,26 @@ def fake_client():
 
 
 @pytest.fixture
-def app(fake_client):
-    """The application, wired to the fake provider."""
+def app(fake_client, tmp_path, monkeypatch):
+    """
+    The application, wired to the fake provider, over its own private
+    ``~/.codeabstract`` for this one test.
+
+    ``tests/conftest.py`` redirects ``CODEABSTRACT_HOME`` once for the
+    whole session so no test writes into a developer's real app data --
+    but sharing *that one* directory across every test in this file means
+    every session, account and audit entry any test creates is visible to
+    every other test that runs afterwards in the same process. That is
+    what made the account-isolation tests flaky to write (see
+    tests/test_web/test_web_auth.py's history): a test asserting "this
+    list is empty" was actually asserting "no *other* test happened to run
+    first". Overriding the env var here, per test function, gives each
+    test its own database, key directory and audit log instead, so a
+    test's assertions describe its own behaviour and nothing upstream of
+    it in the run order.
+    """
+    monkeypatch.setenv('CODEABSTRACT_HOME', str(tmp_path))
+
     from web import create_app
 
     return create_app({
@@ -176,6 +194,22 @@ def app(fake_client):
 def client(app):
     """A test client for the configured app."""
     return app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_rate_limits():
+    """
+    Keep web/auth.py's login/signup limiters from leaking between tests.
+
+    They are module-level singletons (see their docstring), so without
+    this, one test file's signup volume trips another test's assertions
+    purely because Flask's test client always reports 127.0.0.1.
+    """
+    from web.auth import reset_rate_limiters
+
+    reset_rate_limiters()
+    yield
+    reset_rate_limiters()
 
 
 @pytest.fixture

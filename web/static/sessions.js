@@ -85,6 +85,30 @@
     });
   }
 
+  function applyFilter() {
+    var searchBox = el('session-search');
+    var languageBox = el('session-language-filter');
+    if (!searchBox || !languageBox) { return; }
+
+    var query = searchBox.value.trim().toLowerCase();
+    var language = languageBox.value;
+    var visible = 0;
+
+    Array.prototype.forEach.call(el('session-rows').rows, function (row) {
+      var matchesSearch = !query || row.dataset.search.indexOf(query) !== -1;
+      var matchesLanguage = !language || row.dataset.language === language;
+      var show = matchesSearch && matchesLanguage;
+      row.hidden = !show;
+      if (show) { visible += 1; }
+    });
+
+    var status = el('session-filter-status');
+    var total = el('session-rows').rows.length;
+    status.textContent = (query || language)
+      ? 'Showing ' + visible + ' of ' + total + ' sessions.'
+      : '';
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     el('btn-translate').addEventListener('click', translate);
 
@@ -100,6 +124,11 @@
           deleteSession(sessionId, button.closest('tr'));
         }
       });
+    }
+
+    if (el('session-search')) {
+      el('session-search').addEventListener('input', applyFilter);
+      el('session-language-filter').addEventListener('change', applyFilter);
     }
   });
 })();

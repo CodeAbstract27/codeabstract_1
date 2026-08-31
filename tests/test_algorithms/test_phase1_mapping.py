@@ -455,6 +455,52 @@ class TestApplyFix:
     def test_identical_content_has_empty_diff(self):
         assert build_diff("a = 1\n", "a = 1\n", "x.py") == ""
 
+    # ── No top-level defs: the whole-file heuristic falls back to
+    # content similarity, not a bare line count (regression) ──────────
+
+    NO_DEF_SOURCE = '''x = 1
+y = 2
+print(x + y)
+'''
+
+    def test_unrelated_block_not_applicable_when_source_has_no_defs(self):
+        """
+        A script with no top-level function/class defs has nothing to
+        match structurally. A long-enough-but-unrelated code block must
+        not be classified as a whole-file rewrite: applying it would
+        silently discard the developer's actual file.
+        """
+        result = abstract(self.NO_DEF_SOURCE, privacy_level="high")
+        response = (
+            "Here's an unrelated example:\n\n```python\n"
+            "def unrelated_helper():\n    pass\n\n"
+            "def another_one():\n    pass\n"
+            "```\n"
+        )
+        fixes = recover_fixes(
+            response, result.encrypted_mapping, result.encryption_key,
+            original_source=self.NO_DEF_SOURCE,
+        )
+        assert fixes and not fixes[0].applicable, (
+            "an unrelated block must never be offered as a whole-file "
+            "patch just because it has enough lines"
+        )
+
+    def test_genuine_rewrite_still_applicable_when_source_has_no_defs(self):
+        """The similarity fallback must not break the legitimate case."""
+        result = abstract(self.NO_DEF_SOURCE, privacy_level="high")
+        response = (
+            "Here is the fix:\n\n```python\n"
+            + result.abstract_code.replace("NUM_0", "NUM_0  # fixed")
+            + "\n```\n"
+        )
+        fixes = recover_fixes(
+            response, result.encrypted_mapping, result.encryption_key,
+            original_source=self.NO_DEF_SOURCE,
+        )
+        assert fixes and fixes[0].applicable
+        assert "x = 1" in fixes[0].restored_code
+
 
 # ═══════════════════════════════════════════════════════════
 # Import bindings that the filters used to drop (ultrareview)

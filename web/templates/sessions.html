@@ -14,6 +14,23 @@
     </div>
 
     {% if sessions %}
+    <div class="controls">
+      <label class="field">
+        <span>Search</span>
+        <input type="text" id="session-search" spellcheck="false" autocomplete="off"
+               placeholder="filename or session id">
+      </label>
+      <label class="field narrow">
+        <span>Language</span>
+        <select id="session-language-filter">
+          <option value="">all</option>
+          {% for language in sessions|map(attribute='language')|unique|sort %}
+          <option value="{{ language }}">{{ language }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <p id="session-filter-status" class="pane-note"></p>
     <div class="table-scroll">
       <table class="data-table">
         <thead>
@@ -29,7 +46,9 @@
         </thead>
         <tbody id="session-rows">
           {% for session in sessions %}
-          <tr data-session="{{ session.session_id }}">
+          <tr data-session="{{ session.session_id }}"
+              data-search="{{ (session.source_file ~ ' ' ~ session.session_id)|lower }}"
+              data-language="{{ session.language }}">
             <td><code>{{ session.short_id }}</code></td>
             <td>{{ session.source_file }}</td>
             <td>{{ session.language }}</td>
